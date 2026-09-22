@@ -17,7 +17,8 @@ To point your own Custom GPT at this repo:
 
 1. In the GPT builder, add an Action using the schema in
    `openapi/github-fetch-action.yaml` (no authentication needed — this repo
-   is public).
+   is public; the schema already points at
+   github.com/kadenw213-svg/study-prompt-system).
 2. Set the GPT's Instructions field to a short bootstrap pointer telling it
    to fetch `index.md` on its very first turn and follow what it says. See
    `openapi/github-fetch-action.yaml`'s comments for the exact wording used

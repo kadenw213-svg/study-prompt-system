@@ -4,9 +4,9 @@
 # action -> Schema). No authentication is required: this points at a
 # public repo's raw file content, which is a plain, unauthenticated GET.
 #
-# IMPORTANT: replace {OWNER} and {REPO} below with the real GitHub
-# username/org and repo name before pasting this in. Leave {BRANCH} as
-# `main` unless the repo uses a different default branch.
+# Already pointed at the live repo: github.com/kadenw213-svg/study-prompt-system,
+# branch main. Anyone forking the repo for their own GPT should swap the
+# `servers.url` below to their own fork's owner/repo before pasting this in.
 #
 # Suggested bootstrap text for the GPT's own "Instructions" field (paste
 # this there, replacing whatever previously pointed at the old .txt
@@ -28,7 +28,7 @@ info:
     upload, so every session always runs the current version.
   version: 1.0.0
 servers:
-  - url: https://raw.githubusercontent.com/{OWNER}/{REPO}/{BRANCH}
+  - url: https://raw.githubusercontent.com/kadenw213-svg/study-prompt-system/main
     description: Public repo raw-content host (no auth required)
 paths:
   /{filePath}:
