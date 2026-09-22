@@ -325,8 +325,13 @@ Defined fully in `adaptive-study.md`. Never offered below Working Mastery.
 Only meaningful during an active teaching/study session — a different `R`
 than the class-list one below. Re-establishes today's real date, recomputes
 which `weekly_overview` covers it, and compares against the week the
-session has been treating as current. Full mechanics in `curriculum.md`
-(single-class) and `mixed-study-mode.md` (rotation-boundary variant).
+session has been treating as current. **This never re-reads Calendar** —
+it only re-derives from what's already cached. Full mechanics in
+`curriculum.md` (single-class) and `mixed-study-mode.md`
+(rotation-boundary variant). A real Calendar re-sync (new assignments,
+new units) only ever happens via `[F] Refresh Calendar` or the automatic
+stale-cache check in `curriculum.md`'s Curriculum Loading Trigger — do
+not treat `[R]` as covering that case.
 
 On the class list: `R` re-runs Class Discovery and redisplays the list,
 widening the date range when the list was empty (`curriculum.md`).

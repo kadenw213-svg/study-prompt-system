@@ -100,21 +100,34 @@ Working Mastery mid-session and moves from Needs-work to Retention) —
 recompute the plan quietly, no need to re-announce the whole agenda unless
 the ordering materially changes.
 
-## Step 4 — Week-currency check at rotation boundaries
+## Step 4 — Currency check at rotation boundaries
 
 A long Mixed Study session can span real calendar days without the system
-ever re-checking whether the date has rolled into a new week for any given
-class. Rather than an arbitrary fixed number of questions, tie the check to
-what's already a natural boundary: **at the moment a class receives the
-next turn in rotation**, run that class's existing Refresh-Memory
-week-rollover check (`startup-navigation.md`'s `[R]`, full mechanics owned
-by `curriculum.md`) before continuing — bounded, narrow, same mechanics as
-the manual version.
+ever re-checking whether a class's cached curriculum is still actually
+current. This is two distinct checks, not one — do both, in this order,
+at the moment a class receives the next turn in rotation:
 
-- **Match:** continue silently, no interruption.
-- **Rollover found:** say so plainly the same way `[R]` normally does, and
-  fold the new week's start-of-scope Foundational reach-back into that
-  class's upcoming turn rather than treating it as a separate step.
+1. **Stale-cache check first** — the same check `curriculum.md`'s
+   Curriculum Loading Trigger runs on ordinary single-class selection: if
+   that class's `last_calendar_sync_at` is more than 7 days old, run the
+   full Refresh Rule (a real Calendar re-sync — new assignments, new
+   units, new deadlines) before continuing, silently, exactly as it would
+   for a normal selection. This is the check that actually keeps content
+   current; skipping it was a real gap in this module's first draft — a
+   long-running rotation touching a class only every few days would
+   otherwise keep teaching from calendar_cache content that's quietly
+   weeks stale, never re-reading Calendar at all.
+2. **Week-rollover check second, only if step 1 didn't just run** — a
+   fresh Refresh Rule sync trivially makes the current week correct too,
+   so only run the lighter `[R]`-style week-rollover check
+   (`startup-navigation.md`'s `[R]`, mechanics owned by `curriculum.md`)
+   when step 1's staleness threshold wasn't hit.
+
+- **Nothing stale, week matches:** continue silently, no interruption.
+- **Stale cache refreshed, or rollover found:** say so plainly the same
+  way `[F]`/`[R]` normally would, and fold the new week's start-of-scope
+  Foundational reach-back into that class's upcoming turn rather than
+  treating it as a separate step.
 
 This runs once per class per full rotation cycle by construction — no
 separate timer or question counter needed. If a class ends up taking many
@@ -155,7 +168,8 @@ layer over existing primitives, not a data-model change.
 - Rotation announces every class transition plainly, with the real reason.
 - No class is permanently dropped from rotation once it reaches mastery —
   it moves to the Retention tier, it does not exit.
-- A rotation boundary always re-checks that class's current week before
-  teaching/quizzing continues.
+- A rotation boundary always checks staleness first (real Calendar
+  re-sync if `last_calendar_sync_at` is 7+ days old), then that class's
+  current week, before teaching/quizzing continues.
 - Per-class Quiz/Teaching/Reviews state was read and written through the
   same normal paths a single-class session would use — no shortcut writes.

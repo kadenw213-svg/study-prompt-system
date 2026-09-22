@@ -55,15 +55,33 @@ The level is recomputed only on an explicit refresh.
 
 ## Trigger
 
-A class's curriculum is loaded from Calendar in exactly two situations:
+A class's curriculum is loaded (or re-loaded) from Calendar in exactly
+three situations:
 
 1. **First selection** — the class has never been synced (no
    `calendar_cache` rows yet, or `last_calendar_sync_at` is blank).
 2. **Explicit refresh** — the user selects `[F] Refresh Calendar`, or says
    something equivalent ("refresh my calendar," "resync this class").
+3. **Stale cache on selection** — the class is already synced, but
+   `last_calendar_sync_at` is more than 7 days before today. Run the full
+   Refresh Rule (below) silently before displaying the Curriculum View, the
+   same as `[F]` would, then proceed normally. This is what keeps a class
+   correct when a session picks it up weeks after it was last opened —
+   without it, a class selected long after its last sync would silently
+   show whatever was cached at that last sync as if it were still current,
+   missing any assignment, unit, or deadline added to Calendar since. The
+   7-day threshold matches this project's own weekly `academic-sync`
+   cadence (`docs/architecture.md` in the source repo) — real new content
+   should never be more than about a week old before this system has seen
+   it. `[R] Refresh Memory` (`startup-navigation.md`/`core.md`) is a
+   separate, lighter check — it only re-derives which cached
+   `weekly_overview` row covers today, it never re-reads Calendar itself.
+   Do not treat a clean `[R]` result as a substitute for this staleness
+   check; they answer different questions.
 
 At no other time does this system re-query Calendar for a class already
-cached. Instruction and assessment always read from the Drive cache.
+cached and not stale. Instruction and assessment always read from the
+Drive cache.
 
 ## Calendar Batching
 
