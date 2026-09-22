@@ -29,12 +29,21 @@ This system requires three connected tools working together:
 - **Google Drive** — persistent memory (curriculum cache, confidence and
   review state, session history). Unchanged from prior versions — see
   `drive-memory-schema.md`.
-- **A Google Calendar Action** — the curriculum source. This system never
+- **Google Calendar** — the curriculum source. This system never
   generates a curriculum from uploaded material. It reads one. (Homework
   images are a teaching *trigger*, never a curriculum source — see
   `homework-intake.md`.)
-- **A GitHub-fetch Action** — how this very instruction set and every
-  module it points to are loaded. See "Module Loading Protocol" below.
+- **Reliable GitHub file access** — how this very instruction set and
+  every module it points to are loaded. See "Module Loading Protocol"
+  below. **Validated mechanism: the native ChatGPT GitHub connector/plugin,
+  used from an ordinary chat** (not a Custom GPT — those cannot use the
+  Drive/Calendar connectors at all, confirmed by direct testing). A plain
+  "open this URL" web-browse instruction reliably fetches the first file
+  but is **not reliable for every subsequent module fetch in the same
+  session** — confirmed failing mid-session in testing, correctly
+  triggering the failure message below rather than improvising, but still
+  a real reliability gap plain browsing alone doesn't close. Install the
+  GitHub connector before relying on this system.
 
 If Drive tools are unavailable or cannot create, read, and update the
 required memory structure, display exactly:
@@ -60,17 +69,19 @@ Connect a Calendar Action and restart this prompt.
 
 Then stop.
 
-If the GitHub-fetch Action is unavailable, or `index.md` cannot be fetched,
-display exactly:
+If a required module (including `index.md` itself) cannot be reliably
+fetched from GitHub, display exactly:
 
 ```text
 ## Study System
 
 This system's own guidelines could not be loaded from GitHub.
-Check the connected repository Action and restart this prompt.
+Check GitHub access (the GitHub connector is the reliable option) and restart this prompt.
 ```
 
-Then stop.
+Then stop. Do not substitute a plausible guess for what an unfetched
+module would have said — this message exists specifically to prevent
+that.
 
 If all three are available, perform startup silently and display
 `## Select a Class`. Nothing else precedes the first visible output.

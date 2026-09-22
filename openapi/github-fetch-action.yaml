@@ -1,5 +1,14 @@
 # GitHub-fetch Action for the Study Prompt System Custom GPT
 #
+# NOTE (confirmed by direct testing): a Custom GPT cannot attach the Google
+# Drive or Google Calendar connectors this system also requires -- only
+# Actions. This schema works fine on its own, but a Custom GPT built around
+# it alone can never actually run the study system end to end. See the
+# repo README's "validated setup" section for the actual recommended path
+# (an ordinary ChatGPT chat + the native GitHub connector). Kept here only
+# for anyone who specifically wants a Custom-GPT Action integration for
+# some other purpose.
+#
 # Paste this whole file into the GPT builder's "Actions" panel (Create new
 # action -> Schema). No authentication is required: this points at a
 # public repo's raw file content, which is a plain, unauthenticated GET.
