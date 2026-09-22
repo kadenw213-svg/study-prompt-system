@@ -20,15 +20,25 @@ active class, indefinitely — not just a one-time catch-up tool.
   am I behind on," "study everything," "mix my classes," or equivalent
   (Intent Router, `startup-navigation.md`).
 
-## Step 1 — Build the plan
+## Scope: every active class, always, no exclusion setting
 
-Before any rotation begins, build an explicit cross-class teaching plan.
-This is what actually replaces the Sweep's purely-reactive scoring: instead
-of only ranking classes turn-to-turn, work out a real agenda across the
-whole set up front.
+Mixed Study Mode considers every class with `index.status = active` —
+i.e. every class currently loaded from the learner's calendar — full
+stop. There is no per-class opt-in/opt-out preference for Mixed Study, and
+none should be added; that would be exactly the kind of setting this mode
+is deliberately built without (see `core.md`'s Purpose: "there is no
+settings menu"). If the learner wants to study a narrower set, that's what
+selecting a single class from `## Select a Class` (and, within it, a typed
+scope) is already for — a separate, unaffected function. An `archived`
+class is the one exception: archiving already removes a class from normal
+operation everywhere (`class-management.md`), so it's excluded here the
+same way it's excluded from `## Select a Class`'s numbered list — not a
+Mixed-Study-specific setting.
 
-For every active class, gather (all already-available data, no new Drive
-schema):
+## Step 1 — Open with a real assessment, not a fixed schedule
+
+At entry, gather (all already-available data, no new Drive schema) for
+every active class:
 
 - nearest upcoming deadline/exam and its `coverage_text` (Calendar Cache);
 - whether the class has **zero** Quiz evidence anywhere this term (hard
@@ -37,7 +47,8 @@ schema):
   — confidence below 0, active review, or an active Signals-tab flag);
 - whether the current week is untouched (`not started this week`).
 
-Rank classes into three tiers:
+Classify each class into a tier — **this tier assignment is a live signal
+for Step 2's per-turn choice, not a fixed queue position**:
 
 1. **Urgent** — zero evidence anywhere, or a real deadline/exam inside the
    next few days with weak/untested coverage.
@@ -46,59 +57,75 @@ Rank classes into three tiers:
 3. **Retention** — everything currently at Working Mastery or better; no
    real gap, just keeping it warm.
 
-Within each tier, order by the same signals the old Sweep used (nearest
-deadline first, then weak-concept count, then untouched-this-week).
-
-Show the plan as a real, visible agenda before rotation starts:
+Open with a plain, visible assessment — the reasoning, not a schedule:
 
 ```markdown
-## Mixed Study — Today's Plan
+## Mixed Study
 
-1. **BIO1112** — no study evidence yet and a quiz Friday. Starting here.
-2. **MAT1340** — Chapter 2 untouched this week.
-3. **CHE1011** — solid; retention pass to keep it warm.
+BIO1112 — no study evidence yet and a quiz Friday. Starting here.
+MAT1340 — Chapter 2 untouched this week.
+CHE1011 — solid; will get a retention pass to keep it warm.
 
-Rotating through all three, weighted toward BIO1112 and MAT1340 until they catch up.
+I'll move between these as it makes sense — more time on BIO1112 and MAT1340 until they catch up.
 
 [K] Switch Class instead      [M] Menu / Save
 ```
 
-This is computed live and **never persisted** — same treatment as
-Complexity Tier and Curriculum Time Remaining (`startup-navigation.md`).
-It is rebuilt fresh every time Mixed Study Mode is entered, including on
-resume; only rotation *position* (below) is actually saved.
+Computed live and **never persisted** — same treatment as Complexity Tier
+and Curriculum Time Remaining (`startup-navigation.md`).
 
-## Step 2 — Execute by rotation
+## Step 2 — Full live discretion over what happens next, every turn
 
-Run one bounded "turn" per class per rotation cycle, in the plan's order:
+This is the core difference from the old Cross-Class Urgency Sweep and
+from a plain rotation: there is no fixed queue being marched through.
+After **every** bounded turn — one instructional lesson/chunk-and-
+comprehension cycle, or one 5-question Assessment batch, via Adaptive
+Study's normal per-concept routing (`adaptive-study.md`) — re-evaluate all
+active classes fresh and choose the single most valuable next action,
+using the same three levers a good tutor would:
 
-- whatever Adaptive Study's normal per-concept routing (`adaptive-study.md`)
-  would do next for that class's current highest-priority scope — one
-  instructional lesson/chunk-and-comprehension cycle, or one 5-question
-  Assessment batch;
-- then move to the next class in the plan's order;
-- after the last class in the plan, wrap back around to the first.
+- **exam/deadline pressure** — a class with a real deadline closing in and
+  weak/untested coverage on it takes priority, using the same
+  Exam-Readiness Bias already defined in `curriculum.md`;
+- **catching up a real gap** — a class sitting on untouched current-week
+  material or a zero-evidence stretch;
+- **targeted weakness review** — a class with an active review due or a
+  concept sitting below mastery, via `review-weaknesses.md`.
 
-Announce each transition plainly, the same transparency the Sweep already
-required: *"Moving to MAT1340 — Chapter 2 is still untouched."*
+The model has full control to act on whichever of these is most pressing
+right now, including staying on the same class for consecutive turns when
+that's genuinely what's needed (e.g. mid-teaching a concept, or working
+through a due review chain) — this is deliberately not required to
+alternate classes every single turn.
 
-Urgent-tier classes get proportionally more turns per full cycle than
-Needs-work, which get more than Retention — this is a weighting, not an
-exclusion; every active class still gets turns.
+**Real interleaving is still the point, so retention-tier classes must
+keep getting real turns, not just urgent ones forever.** Weight the live
+choice by tier (Urgent gets picked most often, Needs-work next, Retention
+least) rather than starving lower tiers — a class that's solid still needs
+a periodic pass to stay warm, which is the whole reason this mode exists
+over just always doing the single most urgent thing. When nothing is
+genuinely urgent (no class in the Urgent tier), let the choice range freely
+across Needs-work and Retention rather than fixating on whichever class
+happened to go first.
 
-## Step 3 — Rotation never exits once gaps close
+Announce each transition plainly, same as before: *"Moving to MAT1340 —
+Chapter 2 is still untouched."* Only announce a transition when the class
+actually changes — don't narrate "staying on BIO1112" every turn.
+
+## Step 3 — Never exits once gaps close
 
 Unlike the old Sweep, reaching Working Mastery across every class does not
-end Mixed Study Mode. Once a class enters the Retention tier, it keeps
-receiving turns — lower-frequency, but real — for spaced/interleaved
+end Mixed Study Mode. A class that's entered the Retention tier keeps
+getting turns — lower-frequency, but real — for spaced/interleaved
 retention practice. This is what makes `[I]` usable as a sole, everyday
 study driver rather than a mode that stops once "caught up."
 
-The tier ranking from Step 1 is silently recomputed whenever a class's
-state changes enough to move it between tiers (e.g. a class reaches
-Working Mastery mid-session and moves from Needs-work to Retention) —
-recompute the plan quietly, no need to re-announce the whole agenda unless
-the ordering materially changes.
+Tier classification from Step 1 is silently recomputed continuously as
+state changes (a class reaching Working Mastery moves from Needs-work to
+Retention mid-session, a newly-discovered deadline moves a class into
+Urgent) — this feeds directly into Step 2's live choice; there's no
+separate "re-announce the plan" moment needed unless the overall picture
+changes enough that saying so plainly is actually useful to the learner.
 
 ## Step 4 — Currency check at rotation boundaries
 
@@ -129,25 +156,25 @@ at the moment a class receives the next turn in rotation:
   Foundational reach-back into that class's upcoming turn rather than
   treating it as a separate step.
 
-This runs once per class per full rotation cycle by construction — no
-separate timer or question counter needed. If a class ends up taking many
-turns in a row (e.g. it's the only Urgent-tier class for a long stretch),
-this check will run less often for it than for a class alternating every
-turn; if that turns out to matter in practice, the fix is tightening this
-to also fire after N turns within one class, not just at cross-class
-boundaries — flagged here as an open tuning point, not implemented
-speculatively.
+This check runs whenever a class is about to receive a turn, so a class
+that goes many turns without being switched away from checks less often
+than one the live choice alternates onto frequently; if that turns out to
+matter in practice (a class held for a very long stretch never
+re-checked), the fix is also firing this check after N turns on the same
+class regardless of switching — flagged here as an open tuning point, not
+implemented speculatively.
 
 ## Navigation during Mixed Study
 
 `[K]`, `[M]`, `[W]`, `[F]`, `[X]`, etc. behave identically to a
 single-class session, scoped to whichever class currently has the turn.
 
-`[M] Menu / Save` additionally saves **rotation position** — which class
-was about to receive the next turn — the same last-write-wins way Teaching
--tab position is saved today (`drive-memory-schema.md`). On resume, Mixed
-Study rebuilds the plan fresh (Step 1) but resumes rotation starting from
-the saved class rather than always restarting at tier 1.
+`[M] Menu / Save` additionally saves **which class most recently had the
+turn** — the same last-write-wins way Teaching-tab position is saved
+today (`drive-memory-schema.md`). On resume, Mixed Study re-opens with a
+fresh Step 1 assessment (never a stored "plan") and Step 2's live choice
+picks up from there — the saved class is just a resume hint for the
+opening assessment, not a queue position to restart from.
 
 `[K] Switch Class` exits Mixed Study Mode entirely and returns to
 `## Select a Class`, same as it would from a single-class session.
