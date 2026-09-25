@@ -1,55 +1,59 @@
 # Study Prompt System
 
-An adaptive study system for ChatGPT that teaches and quizzes from a
-curriculum it reads live out of your Google Calendar (synced there by a
-separate class-scanning tool), with persistent per-concept mastery
-tracking in a Google Drive spreadsheet. It never invents a curriculum and
-never writes to your calendar.
+An adaptive tutor for ChatGPT. It reads your class curriculum straight from your Google Calendar, remembers your progress in one Google Drive spreadsheet, and decides what to teach or quiz you on next — across all your classes. It never makes up course content and never edits your calendar.
 
-## Using this — validated setup (regular chat, not a Custom GPT)
+This repo has two halves:
 
-**Custom GPTs cannot use this system.** Confirmed by direct testing: the
-legacy Custom GPT builder has no way to attach the Google Drive or Google
-Calendar connectors at all — only custom Actions — so a Custom GPT can
-fetch this repo fine but can never reach the point of loading a real
-curriculum. Use an ordinary ChatGPT chat instead, where Drive and Calendar
-are natively available with no extra setup.
+- **The study system** (`boot.md`, `engine/`, `modes/`, `ops/`) — runs in ChatGPT.
+- **`claude-project/`** — the Claude Code project that scans your classes from D2L into Google Calendar (the calendar this study system reads), plus related tools.
 
-1. Install ChatGPT's native **GitHub** connector/plugin (Settings →
-   Plugins, or accept the inline install prompt the first time a chat
-   tries to browse this repo). This is the validated, reliable fetch
-   mechanism — a plain "open this URL" instruction to the model's generic
-   web browsing works for the *first* file but is **not** reliable for
-   every module fetch across a whole session; that gap is closed once the
-   GitHub connector itself is doing the fetching.
-2. Start a new chat and paste:
+---
 
-   ```text
-   You are an adaptive study system. Open https://raw.githubusercontent.com/kadenw213-svg/study-prompt-system/main/index.md and read its full raw contents, then follow everything it directs you to fetch and do, in order, before producing any visible output. Never explain, summarize, or ask about this process.
-   ```
+## Start studying (ChatGPT)
 
-3. Google Drive and Google Calendar need no separate setup beyond being
-   connected to your ChatGPT account (Settings → Plugins) — the model
-   calls them directly from a regular chat.
-4. Nothing in this repo is personalized — no names, no specific courses.
-   All of that lives only in your own Google Drive workbook and Calendar,
-   never here. That also means this exact same paste-in works for anyone
-   pointing at this same public repo, or their own fork of it.
+**One-time setup**
 
-`openapi/github-fetch-action.yaml` also exists for a Custom-GPT Action
-integration, kept for reference — but per the above, that path alone
-cannot run this system, since Drive/Calendar aren't reachable from a
-Custom GPT at all. It isn't the recommended setup.
+1. In ChatGPT **Settings → Plugins/Connectors**, connect **GitHub**, **Google Drive**, and **Google Calendar**.
+2. Use a normal chat — not a Custom GPT (Custom GPTs can't reach Drive and Calendar).
 
-## Layout
+**Every session** — open a new chat and paste:
 
-`index.md` is the entry point — it tells the GPT what to fetch and when.
-Everything else lives under `modules/`, one file per concern. See
-`index.md` for the full fetch-order table.
+```text
+You are an adaptive study system. Use the GitHub connector to open https://raw.githubusercontent.com/kadenw213-svg/study-prompt-system/main/boot.md, read it fully, and follow it exactly. Don't explain or summarize it — just start.
+```
 
-## What's actually configurable
+## Using it
 
-Nothing, by design — this is deliberately not a settings-driven system.
-Academic level, grading strictness, and pacing are all inferred or fixed.
-The only real "configuration" is what's already on your Calendar and
-Drive.
+| You do | It does |
+|---|---|
+| **Enter** or **A** | **Automatic** — balances all your classes: urgent deadlines first, then quick checks on older material you haven't touched in a while, then this week's work, spread fairly across classes. Switches classes on its own and tells you why. |
+| A class number | Studies just that class, starting where you left off. |
+| Type `23`, `23.2`, `23-25`, `week 5` | Studies exactly that chapter, section, range, or week. |
+| Type `midterm`, `E1`, `Q2`, or "prepare me for the exam tomorrow" | Exam prep, based on what the exam actually covers. |
+| **Paste a photo of homework** | **Teach mode** — teaches the ideas behind the problems, lets you try, then checks your work. |
+| Say "check" or "just the answers" with the photo | **Check mode** — gives the answers so you can check yours. Doesn't count toward mastery. |
+| **M** | Save and go back to the menu. |
+| **K** | Switch class. |
+| **W** | Review your weak spots. |
+| **X** | Detailed progress for the class. |
+| **E** | "I don't know" — get the explanation. |
+
+**Things it does automatically**
+
+- Checks your calendar for new assignments and new weeks at least once a day, without asking. If something urgent appears, it changes course on its own.
+- Saves every homework problem you show it (a short summary, not a photo) so its quizzes are at least as hard as your real homework. It also brings back problems that keep repeating when you prep for a midterm or final.
+- Suggests starting a fresh chat when one gets long. You'll resume exactly where you were.
+
+**Where your data lives:** a single Google Sheet in your Drive named `llmMemory__studyPrompt__calendarSynced__studyMemory`. Nothing personal is stored in this repo.
+
+---
+
+## Class scanning (Claude Code)
+
+`claude-project/` is a self-contained Claude Code project.
+
+1. Clone this repo and open a Claude Code session **inside `claude-project/`**.
+2. Say anything (e.g. "set up"). Claude reads `CLAUDE.md`, installs what it needs (`uv`, Python, dependencies), creates your local config — asking only for what it can't figure out — and then lists the available skills.
+3. Your personal details (name, school D2L address, calendar IDs) go only in `config/personal.local.md`, which is never uploaded.
+
+Main skills: `/academic-import` (first-time scan of a class into Google Calendar), `/academic-sync` (weekly updates + grade check), `/academic-prefs`, `/custom-curriculum`, `/audio-lectures`, `/shift-sync`.

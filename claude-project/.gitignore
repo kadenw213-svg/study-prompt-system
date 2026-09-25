@@ -1,0 +1,44 @@
+# Secrets & credentials
+.env
+*.env
+credentials.json
+token.json
+client_secret*.json
+
+# Browser/session state (per architecture: browser control is live via Claude Code,
+# but keep this ignored in case any adapter ever persists cookies/storage state)
+.browser_state/
+*.session.json
+
+# Local database & runtime data
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/downloads/
+data/logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Personal details (see config/personal.example.md)
+config/personal.local.md
+
+# Claude Code runtime state
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
