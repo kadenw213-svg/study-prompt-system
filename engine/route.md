@@ -8,7 +8,7 @@ Every mode runs its scope through this file. Routing is silent: never say "teach
 - **in progress**: teaching position is inside the scope but before its end; or the scope is partly tested.
 - **weak**: confidence < 0, an active review, repeated misses, or an active signal on its chapter.
 - **solid**: tested, confidence ≥ +0.50, no active review, no active signal.
-- **stale**: tested, but `last_tested_on` is more than 14 days ago (or blank on an old row) → eligible for a Baseline Probe.
+- **stale**: tested and **not solid** (confidence < +0.50), with `last_tested_on` more than 14 days ago → eligible for a Baseline Probe. A blank `last_tested_on` means "date unknown" (rows from before the column existed) and is **never** stale; it gets a date the next time the concept is tested. Solid concepts are never stale, however old: they get retention passes instead.
 
 ## Routing (by the scope's dominant state)
 

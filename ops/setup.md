@@ -25,7 +25,7 @@ Drive: search by exact title/ID, create a Google Sheet, read metadata + bounded 
 
 - **`_v6_` marker**: add the `calendar_cache.links` column, seeding each row from the old `reference_url`/`reference_url_label` and `resource_url`/`resource_url_label` (one object each); delete the `settings` `default_academic_level` row; set the marker to `_v7_`. Leave the old `*_url*` columns and stop writing them.
 - **Missing `state` keys**: add `last_currency_check_date`, `auto_last_class_key`, `checkpoint`, `summaries`, `next_due` (blank).
-- **Missing columns**: `index.bank_tab`, `index.synthetic` (append after the last existing header, never reorder; `synthetic` defaults to `false`); `quiz.last_tested_on` (append; leave it blank on existing rows — blank on a tested row counts as stale).
+- **Missing columns**: `index.bank_tab`, `index.synthetic` (append after the last existing header, never reorder; `synthetic` defaults to `false`); `quiz.last_tested_on` (append; leave it blank on existing rows — blank means "date unknown", never stale).
 - **Missing teaching rows**: `last_studied_at`, `blocks_today`, `blocks_today_date`.
 - **Missing tabs**: `<slug>__bank` / `<slug>__signals` with headers (`engine/memory.md`); set `index.bank_tab`.
 - Legacy `sessions.mode` values (`adaptive`, `mixed`) stay as they are.

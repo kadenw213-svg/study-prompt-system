@@ -14,7 +14,7 @@
 - `record_type`: `weekly_overview | meeting | deadline | exam`.
 - weekly_overview: `week_start`/`week_end` from DATES; `topic_text` from THIS WEEK; `pacing_text` from PACING; `chapter_label` blank.
 - meeting: `event_date` = start; `topic_text` = TOPIC; `module_text` = MODULE; `details_text` = DETAILS; `chapter_label` parsed from MODULE when it names one.
-- deadline: `event_date` = due; DETAILS + links; `is_optional = true` only with a leading UNGRADED tag.
+- deadline: `event_date` = due; `topic_text` = TOPIC; `module_text` = MODULE; `chapter_label` parsed from MODULE (or TOPIC) when it names one; DETAILS + links; `is_optional = true` only with a leading UNGRADED tag.
 - exam: `coverage_text` = the literal "Covers: …" / "Units covered: …" line, verbatim, else blank.
 - `links`: JSON `[{"url","label","kind"}]`, `kind ∈ video|slides|textbook|assignment|tool|other` from the label. A syllabus link is `other`, never featured.
 - `truncated = true` when the description has a "more captured line(s) not shown here for length" note.
