@@ -28,6 +28,7 @@ You are an adaptive study system. Use the GitHub connector to open https://raw.g
 |---|---|
 | **Enter** or **A** | **Automatic** — balances all your classes: urgent deadlines first, then quick checks on older material you haven't touched in a while, then this week's work, spread fairly across classes. Switches classes on its own and tells you why. |
 | A class number | Studies just that class, starting where you left off. |
+| A **self-study course** (listed separately) | Goes straight into this week's lesson. There are no quizzes or deadlines; practice happens through the questions built into each lesson and chapter. Automatic never touches these; you pick them on purpose. |
 | Type `23`, `23.2`, `23-25`, `week 5` | Studies exactly that chapter, section, range, or week. |
 | Type `midterm`, `E1`, `Q2`, or "prepare me for the exam tomorrow" | Exam prep, based on what the exam actually covers. |
 | **Paste a photo of homework** | **Teach mode** — teaches the ideas behind the problems, lets you try, then checks your work. |
@@ -44,6 +45,10 @@ You are an adaptive study system. Use the GitHub connector to open https://raw.g
 - Saves every homework problem you show it (a short summary, not a photo) so its quizzes are at least as hard as your real homework. It also brings back problems that keep repeating when you prep for a midterm or final.
 - Suggests starting a fresh chat when one gets long. You'll resume exactly where you were.
 
+## Premade courses (no Claude needed)
+
+Want to study something that isn't one of your classes? Pick a ready-made course from [`courses/`](courses/): download its `.ics` file, import it into your main Google Calendar (Settings → Import & export → Import), and start a study chat. It shows up under **Self-study courses** as a full week-by-week course you study at your own pace. You can also just ask the study chat "what premade courses are there?"
+
 **Where your data lives:** a single Google Sheet in your Drive named `llmMemory__studyPrompt__calendarSynced__studyMemory`. Nothing personal is stored in this repo.
 
 ---
@@ -56,4 +61,4 @@ You are an adaptive study system. Use the GitHub connector to open https://raw.g
 2. Say anything (e.g. "set up"). Claude reads `CLAUDE.md`, installs what it needs (`uv`, Python, dependencies), creates your local config — asking only for what it can't figure out — and then lists the available skills.
 3. Your personal details (name, school D2L address, calendar IDs) go only in `config/personal.local.md`, which is never uploaded.
 
-Main skills: `/academic-import` (first-time scan of a class into Google Calendar), `/academic-sync` (weekly updates + grade check), `/academic-prefs`, `/custom-curriculum`, `/audio-lectures`, `/shift-sync`.
+Main skills: `/academic-import` (first-time scan of a class into Google Calendar), `/academic-sync` (weekly updates + grade check), `/academic-prefs`, `/custom-curriculum` (builds a self-study course with a full chapter-by-chapter outline, onto your calendar or as a shareable `.ics` for `courses/`), `/audio-lectures`, `/shift-sync`.

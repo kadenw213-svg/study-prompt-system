@@ -234,6 +234,17 @@ def _0014_weekly_diagnostic_records_per_course(session: Session) -> None:
         Base.metadata.create_all(session.get_bind())
 
 
+def _0015_add_item_mock_spec(session: Session) -> None:
+    # RETIRED -- nothing reads or writes mock_spec_json. It was added
+    # 2026-09-25 for a mock-quiz feature for synthetic courses that the user
+    # reversed the same day, before it shipped (see CLAUDE.md invariant 35).
+    # Kept only because it already ran on the local DB: removing it would make
+    # the next real migration's number collide with this schema version.
+    existing = {row[1] for row in session.execute(text("PRAGMA table_info(academic_items)"))}
+    if "mock_spec_json" not in existing:
+        session.execute(text("ALTER TABLE academic_items ADD COLUMN mock_spec_json JSON"))
+
+
 MIGRATIONS: list[MigrationFn] = [
     _0001_initial_schema,
     _0002_add_item_reference_urls,
@@ -249,6 +260,7 @@ MIGRATIONS: list[MigrationFn] = [
     _0012_add_item_weekly_links,
     _0013_add_grade_diagnostic_tables,
     _0014_weekly_diagnostic_records_per_course,
+    _0015_add_item_mock_spec,
 ]
 
 

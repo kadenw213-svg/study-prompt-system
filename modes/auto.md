@@ -1,10 +1,10 @@
 # Mode: Automatic
 
-Studies across **every** `index.status = active` class (archived excluded, no opt-out setting) and decides what to do next at every block. It never ends once caught up: it keeps rotating for retention.
+Studies across **every** `index.status = active` **real** class (archived excluded, no opt-out setting) and decides what to do next at every block. It never ends once caught up: it keeps rotating for retention. **Self-study (`synthetic`) courses are never picked, loaded, mentioned, or counted here** — they're studied only by selecting them directly.
 
 ## Enter
 
-1. Study bundle loaded. `engine/memory.md` Load class for **every** active class (one batched read per class; `ops/sync.md` Load Procedure for any class with no cache).
+1. Study bundle loaded. `engine/memory.md` Load class for **every** active real class (one batched read per class; `ops/sync.md` Load Procedure for any class with no cache).
 2. Run the Scheduler once for all classes and open with the plan: the reasoning, never a fixed schedule.
 ```markdown
 ## Automatic
@@ -21,7 +21,7 @@ The plan is computed live and never stored. `state.auto_last_class_key` only **l
 
 ## Scheduler (run fresh at every block boundary, after the Currency check)
 
-Candidates come from all active classes. Take the **first rule that yields work**:
+Candidates come from all active real classes. Take the **first rule that yields work**:
 
 1. **Deadline pressure**: a non-optional deadline/exam within 48 h whose coverage has weak or untested concepts → that class, that coverage (exam coverage via `modes/exam.md` rules).
 2. **Old gaps**: earlier-than-current-week chapters that are Untested (never reached) or **stale** (`engine/route.md`), in any class. A class with **zero** Quiz evidence all term goes first. Then order by (a) prerequisite of this or next week's work, then (b) the oldest `last_tested_on`/week. → **Baseline Probe** (`engine/route.md`). Fluent → drop it from this rule for the session. Not fluent → teach + review-quiz it (a prerequisite goes before the dependent current work).

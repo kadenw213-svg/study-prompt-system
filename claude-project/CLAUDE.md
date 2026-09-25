@@ -29,7 +29,7 @@ Then reply:
 > - `/academic-import` -- first-time scan of a D2L course into Google Calendar
 > - `/academic-sync` -- weekly re-scan, link refresh, and grade check
 > - `/academic-prefs` -- view/change preferences
-> - `/custom-curriculum` -- build a self-directed "class" on any topic
+> - `/custom-curriculum` -- build a self-directed course on any topic (to Calendar or a shareable .ics)
 > - `/audio-lectures` -- turn the week's material into narrated audio
 > - `/shift-sync` -- copy work shifts onto your main calendar
 
@@ -804,6 +804,38 @@ to add either; that decision was deliberate, not an oversight.
     ChapterTopic rows is expected and correct for this course type, not a
     gap the normal branch chain should evaluate.
 
+    **Amended 2026-09-25 -- a synthetic course's banners carry a full
+    teaching outline; still no assessments of any kind.** User-directed:
+    the GPT study system should be able to teach a generated course as a
+    complete, coherent class from its banners alone. `custom-curriculum`
+    now calls `chapter-topic-add` for **every** chapter (title, 6-12
+    objectives in teaching order, 8-15 key terms), authored and
+    user-approved like the rest of the outline. `render` auto-pulls them
+    into each banner's THIS WEEK, the same mechanism a real course uses,
+    and the GPT system parses that into its content structure. This
+    replaces the earlier "never calls `chapter-topic-add`" rule. Never pass
+    `--exhaustive` for a synthetic course: that flag certifies a real
+    platform's complete topic list, and completeness short-circuits these
+    courses anyway. **No quizzes, exams, homework, assignments, or
+    deadlines for a synthetic course** (a same-day plan for mock quizzes
+    was reversed by the user before shipping). Practice comes entirely
+    from the GPT system's teaching mode. The GPT system lists synthetic
+    courses separately and never includes them in its Automatic mode.
+    Migration `_0015_add_item_mock_spec` (and its unused
+    `academic_items.mock_spec_json` column) stays in `MIGRATIONS` only
+    because it already ran on the local DB: removing it would make the
+    next real migration number collide. Nothing reads or writes that column.
+
+    Also 2026-09-25: `academic-sync export-ics --course <id> --out <path>`
+    (`sync/ics_export.py`) writes a course's syncable items to one RFC 5545
+    file through the exact same render path as `render` (`cli.py::
+    _render_item_payload`), for the study-prompt-system repo's premade
+    `courses/` library. UID = the item fingerprint (re-import updates, never
+    duplicates), UTC times, no ATTENDEE/ORGANIZER/conference data
+    (invariant 4), deterministic output. An `.ics` export writes nothing to
+    anyone's calendar; publishing it to the public repo needs the user's
+    explicit OK after their own audit.
+
 36. **`/academic-import` is first-time discovery only; every recurring run
     (light re-scan, link refresh, the weekly grade diagnostic) is
     `/academic-sync`'s job.** User-directed 2026-09-16. Before this split,
@@ -985,7 +1017,10 @@ is not a Python-version quirk; it reproduces on 3.12 and 3.14 alike.
   self-directed "class" on a topic the user describes (no real D2L source),
   using the same `Course`/`AcademicItem` model and Calendar-rendering
   pipeline as a real course, flagged `Course.is_synthetic` -- see invariant
-  35. Its calendar footprint is `WEEKLY_READING` banners only.
+  35. Its footprint is `WEEKLY_READING` banners carrying a full per-chapter
+  teaching outline (`chapter-topic-add`), output to Calendar and/or a `.ics`
+  file (`export-ics`) for the study-prompt-system repo's `courses/` library.
+  No assessments.
 - `.claude/skills/shift-sync/SKILL.md` -- unrelated to D2L/academics: mirrors
   the user's YMCA work-shift calendar onto their main calendar. Deliberately
   has no Python package/database of its own (see that file for why) -- don't

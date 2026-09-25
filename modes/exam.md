@@ -5,7 +5,7 @@ Triggered by selecting or naming a listed quiz/exam, or "prepare me for the exam
 ## Enter
 
 1. Study bundle loaded; Load class.
-2. For "prepare me for the exam tonight/tomorrow/this week": search every active class's cached `exam`/quiz `deadline` rows in that window. Exactly 1 match → use it. 0 or more than 1 → say so plainly, list what was found, and let the user pick.
+2. For "prepare me for the exam tonight/tomorrow/this week": search every active **real** class's cached `exam`/quiz `deadline` rows in that window. Exactly 1 match → use it. 0 or more than 1 → say so plainly, list what was found, and let the user pick.
 3. **Coverage resolution** from `calendar_cache.coverage_text`:
    1. parse chapter/unit references (`Ch. 1-3`, `Unit 2`, named lists) with canonicalization;
    2. match them to chapter (and, when specific enough, lesson/concept) keys;

@@ -50,7 +50,7 @@ Never delete: current Quiz confidence, active reviews, current teaching position
 
 ## Parsing Calendar descriptions
 
-HTML fragments. A `<b>SECTION</b><br>` starts a section, ending at the next `<b>` or the end. `<br>` = new line. A leading `•` = bullet. In THIS WEEK, `Chapter N — Topic:` + bullets = one chapter block, so split on these headers. A leading `<b>UNGRADED</b>` = optional/extra credit, never a graded requirement. Capture every `<a href="URL">Label</a>` in LINKS (and in a meeting's DETAILS) verbatim; never construct or alter a URL. Discard the trailing `<small>[academic-sync:fp:…]</small>`. Never invent anything parsing did not find.
+HTML fragments (a file-imported event may instead arrive as plain text: treat a line that is exactly an uppercase section name — `TOPIC`, `MODULE`, `DETAILS`, `THIS WEEK`, `PACING`, `LINKS`, `DATES`, `SYNTHESIZED CURRICULUM` — as that section header, and `Label (URL)` as a link). A `<b>SECTION</b><br>` starts a section, ending at the next `<b>` or the end. `<br>` = new line. A leading `•` = bullet. In THIS WEEK, `Chapter N — Topic:` + bullets = one chapter block, so split on these headers. Within a block: a `• Vocabulary: a, b, …` bullet → that chapter's `vocabulary`; every other bullet → one objective, **in the order given** (that order is the teaching order). When the chapter has no finer per-event granularity, each objective becomes one `concept` row (`sequence_order` = its position) and the Instruction Engine teaches them in that order. A leading `<b>UNGRADED</b>` = optional/extra credit, never a graded requirement. Capture every `<a href="URL">Label</a>` in LINKS (and in a meeting's DETAILS) verbatim; never construct or alter a URL. Discard the trailing `<small>[academic-sync:fp:…]</small>` (or bare `[academic-sync:fp:…]` in a file-imported event). Never invent anything parsing did not find.
 
 ## Load class (one batched read)
 
@@ -87,4 +87,6 @@ Clauses joined with ` · `, each only when it applies, one line:
 5. Curriculum Time Remaining: count concepts below Quiz Mastery (conf < +0.80 or Untested) in this week's chapters **plus** earlier chapters with a gap or any weak concept; × 15 min; round **up** to 10 / 30 / 45 min, then whole hours above 45 min → `N Hours of curriculum Remain` / `N minutes of curriculum Remain`; omit if 0. A planning cue only; never gate anything on it.
 6. `⚠ earlier gap` if any earlier-than-current-week chapter was never reached by teaching **and** is Untested.
 
-`state.next_due` = the soonest non-optional deadline/exam across active classes, from today on: `CODE Title — Day` (weekday if within 7 days, else `Mon D`).
+Self-study course line: the same clauses (it has no deadlines, so priority never comes from due dates).
+
+`state.next_due` = the soonest non-optional deadline/exam across active **real** classes, from today on: `CODE Title — Day` (weekday if within 7 days, else `Mon D`).

@@ -5,6 +5,7 @@
 1. Study bundle loaded (`boot.md`).
 2. `engine/memory.md` Load class (no cache → `ops/sync.md` Load Procedure first).
 3. Set `state.active_class_key`/`_name`. Show the Curriculum View, then start Default Start (or the typed scope).
+4. **Self-study course** (`index.synthetic = true`): skip the Curriculum View and go straight into teaching this week's material (Default Start, with a one-line opener: `Week 2 — Probability.`). `[V]` shows the Curriculum View anytime. A self-study course has no quizzes, exams, or deadlines: practice is teaching mode's comprehension questions, chapter checkpoints, and scored batches, exactly as for any class.
 
 ## Curriculum View
 
@@ -26,6 +27,7 @@ Starting where you left off in Ch 23. Type a chapter, section, quiz, or exam to 
 [M] Menu / Save      [W] Review Weaknesses      [K] Switch Class      [A] Automatic
 ```
 
+- In a self-study course the command line omits `[A] Automatic`, and the view never lists quizzes/exams (there are none).
 - Every real chapter in curriculum order, including past weeks; every line selectable. Real sections, when present, go indented under their chapter (`23.1 …`).
 - **State cue** = the chapter's confidence band in words: `untested` / `teaching` / `learning` / `solid` / `mastered` (mastered = Quiz Mastery). Never numbers here.
 - **Quiz/exam placement**: indent `▸` and always show the due date. Place it right after the highest chapter/section its `coverage_text` names; if coverage is blank, place it by due date between the two chapters whose `weekly_overview` ranges bracket it; if neither works, put it under a trailing `### Assessments` group. Never infer coverage from the title.
@@ -50,7 +52,7 @@ Among equal choices, prefer readiness for the nearest real deadline.
 
 ## Loop
 
-Run the scope through `engine/route.md` → `engine/teach.md` / `engine/assess.md`. Run the Currency check at each block boundary. If a check finds new urgent work in **another** class, add one line: `New: CHE1011 Lab 4 due Tue — [A] to let Automatic rebalance.`
+Run the scope through `engine/route.md` → `engine/teach.md` / `engine/assess.md`. Run the Currency check at each block boundary. If a check finds new urgent work in **another real** class, add one line: `New: CHE1011 Lab 4 due Tue — [A] to let Automatic rebalance.` (Never inside a self-study course.)
 
 ## Next chapter / next week — `N`
 
@@ -76,7 +78,7 @@ Show it once, then `[M]` returns. Never show raw concept rows unless asked.
 ## Exit
 
 - Scope complete → `Selected material complete. Progress saved.` → Save → Curriculum View.
-- `[M]` → Menu Save → Curriculum View. `[K]` → Save → Select a Class. `[A]` → Save → `modes/auto.md`.
+- `[M]` → Menu Save → Curriculum View. `[K]` → Save → Select a Class. `[A]` → Save → `modes/auto.md` (real classes only; not offered inside a self-study course).
 
 ## Save
 
