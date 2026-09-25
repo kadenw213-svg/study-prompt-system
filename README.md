@@ -45,10 +45,6 @@ You are an adaptive study system. Use the GitHub connector to open https://raw.g
 - Saves every homework problem you show it (a short summary, not a photo) so its quizzes are at least as hard as your real homework. It also brings back problems that keep repeating when you prep for a midterm or final.
 - Suggests starting a fresh chat when one gets long. You'll resume exactly where you were.
 
-## Premade courses (no Claude needed)
-
-Want to study something that isn't one of your classes? Pick a ready-made course from [`courses/`](courses/): download its `.ics` file, import it into your main Google Calendar (Settings → Import & export → Import), and start a study chat. It shows up under **Self-study courses** as a full week-by-week course you study at your own pace. You can also just ask the study chat "what premade courses are there?"
-
 **Where your data lives:** a single Google Sheet in your Drive named `llmMemory__studyPrompt__calendarSynced__studyMemory`. Nothing personal is stored in this repo.
 
 ---
@@ -61,4 +57,4 @@ Want to study something that isn't one of your classes? Pick a ready-made course
 2. Say anything (e.g. "set up"). Claude reads `CLAUDE.md`, installs what it needs (`uv`, Python, dependencies), creates your local config — asking only for what it can't figure out — and then lists the available skills.
 3. Your personal details (name, school D2L address, calendar IDs) go only in `config/personal.local.md`, which is never uploaded.
 
-Main skills: `/academic-import` (first-time scan of a class into Google Calendar), `/academic-sync` (weekly updates + grade check), `/academic-prefs`, `/custom-curriculum` (builds a self-study course with a full chapter-by-chapter outline, onto your calendar or as a shareable `.ics` for `courses/`), `/audio-lectures`, `/shift-sync`.
+Main skills: `/academic-import` (first-time scan of a class into Google Calendar), `/academic-sync` (weekly updates + grade check), `/academic-prefs`, `/custom-curriculum` (builds a self-study course with a full chapter-by-chapter outline on your calendar), `/audio-lectures`, `/shift-sync`.

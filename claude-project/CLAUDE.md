@@ -29,7 +29,7 @@ Then reply:
 > - `/academic-import` -- first-time scan of a D2L course into Google Calendar
 > - `/academic-sync` -- weekly re-scan, link refresh, and grade check
 > - `/academic-prefs` -- view/change preferences
-> - `/custom-curriculum` -- build a self-directed course on any topic (to Calendar or a shareable .ics)
+> - `/custom-curriculum` -- build a self-directed course on any topic
 > - `/audio-lectures` -- turn the week's material into narrated audio
 > - `/shift-sync` -- copy work shifts onto your main calendar
 
@@ -826,16 +826,6 @@ to add either; that decision was deliberate, not an oversight.
     because it already ran on the local DB: removing it would make the
     next real migration number collide. Nothing reads or writes that column.
 
-    Also 2026-09-25: `academic-sync export-ics --course <id> --out <path>`
-    (`sync/ics_export.py`) writes a course's syncable items to one RFC 5545
-    file through the exact same render path as `render` (`cli.py::
-    _render_item_payload`), for the study-prompt-system repo's premade
-    `courses/` library. UID = the item fingerprint (re-import updates, never
-    duplicates), UTC times, no ATTENDEE/ORGANIZER/conference data
-    (invariant 4), deterministic output. An `.ics` export writes nothing to
-    anyone's calendar; publishing it to the public repo needs the user's
-    explicit OK after their own audit.
-
 36. **`/academic-import` is first-time discovery only; every recurring run
     (light re-scan, link refresh, the weekly grade diagnostic) is
     `/academic-sync`'s job.** User-directed 2026-09-16. Before this split,
@@ -1018,9 +1008,8 @@ is not a Python-version quirk; it reproduces on 3.12 and 3.14 alike.
   using the same `Course`/`AcademicItem` model and Calendar-rendering
   pipeline as a real course, flagged `Course.is_synthetic` -- see invariant
   35. Its footprint is `WEEKLY_READING` banners carrying a full per-chapter
-  teaching outline (`chapter-topic-add`), output to Calendar and/or a `.ics`
-  file (`export-ics`) for the study-prompt-system repo's `courses/` library.
-  No assessments.
+  teaching outline (`chapter-topic-add`), synced to Calendar. No
+  assessments.
 - `.claude/skills/shift-sync/SKILL.md` -- unrelated to D2L/academics: mirrors
   the user's YMCA work-shift calendar onto their main calendar. Deliberately
   has no Python package/database of its own (see that file for why) -- don't

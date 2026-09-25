@@ -1,6 +1,6 @@
 ---
 name: custom-curriculum
-description: Build a fully synthetic, self-directed "class" on a topic the user describes -- no real D2L source -- as weekly overview banners carrying a full chapter-by-chapter teaching outline (ordered objectives + key terms), so the GPT study system can teach it as a complete, coherent course. Output goes to Google Calendar, a shareable .ics file for the study-prompt-system repo's premade courses library, or both. Use when the user wants to study a topic on their own schedule, or build a premade course for others.
+description: Build a fully synthetic, self-directed "class" on a topic the user describes -- no real D2L source -- as weekly overview banners carrying a full chapter-by-chapter teaching outline (ordered objectives + key terms), so the GPT study system can teach it as a complete, coherent course. Syncs to Google Calendar. Use when the user wants to study a topic on their own schedule.
 user-invocable: true
 ---
 
@@ -12,7 +12,7 @@ algebra" / "organic chemistry basics").
 This skill authors a complete course -- a week-by-week sequence **and a full
 teaching outline for every chapter** -- for a class that doesn't exist
 anywhere but here, registers it in the same local database real scraped
-courses live in, and outputs it to Google Calendar and/or a `.ics` file in
+courses live in, and syncs it to Google Calendar in
 exactly the format `academic-import` produces. The GPT study system (the
 `study-prompt-system` repo's `boot.md` + `engine/`/`modes/` rule files, one
 level above `claude-project/`) reads each weekly banner's THIS WEEK section
@@ -24,8 +24,7 @@ session -- it's the authoritative carve-out this skill operates under.
 **Working directory**: the `academic-sync` project at the repository root.
 All CLI commands are `uv run academic-sync ...` via Bash.
 
-**Live tools**: `mcp__claude_ai_Google_Calendar__*`, in Step 4's Calendar
-path only. Nothing here touches D2L or a browser.
+**Live tools**: `mcp__claude_ai_Google_Calendar__*`, in Step 4 only. Nothing here touches D2L or a browser.
 
 **What this skill produces**: `WEEKLY_READING` banners only, plus one
 `chapter-topic-add` row per chapter, which `render` automatically pulls into
@@ -43,9 +42,6 @@ Ask directly, don't guess:
 3. **Pacing tier** -- **Light** ~2-4 h/week · **Moderate** ~5-8 h/week ·
    **Intensive** ~9-14 h/week (rough ranges, say so).
 4. **Start date** -- default to the upcoming Monday and say so plainly.
-5. **Output** -- `Calendar`, `.ics file` (saved to
-   `github_study_prompt/courses/` for the premade library), or `both`. Ask
-   every time; no default.
 
 ## Step 1: author the course (local, no writes yet)
 
@@ -90,7 +86,7 @@ that means the plan was too dense.
 ## Step 2: present for explicit approval (mandatory gate)
 
 Show everything before any write: topic, level, weeks, pacing tier + hour
-range, start date, output choice, the week-by-week plan (one line per week
+range, start date, the week-by-week plan (one line per week
 with its date range and chapters), then **every chapter's full outline**
 (title, ordered objectives, key terms).
 
@@ -128,25 +124,16 @@ partial yes. Apply requested edits and re-show the changed parts.
    saved topic. All three commands are idempotent -- re-running corrects the
    same row, never duplicates.
 
-## Step 4: output
+## Step 4: render and push to Calendar
 
-**Calendar path.** Reuse `academic-import`'s Step 5 flow exactly: for each
+Reuse `academic-import`'s Step 5 flow exactly: for each
 banner, `uv run academic-sync render <item_id> --json` (it auto-pulls the
 saved chapter topics into THIS WEEK) → `mcp__claude_ai_Google_Calendar__
 create_event` → `uv run academic-sync record-sync <item_id> --event-id <id>
 --calendar-id <calendar_id>` right after each successful write. Batch
 independent creates.
 
-**`.ics` path.**
-1. `uv run academic-sync export-ics --course <course_id> --out
-   github_study_prompt/courses/<slug>.ics` (`slug` = lowercase-hyphenated
-   topic, e.g. `intro-statistics.ics`).
-2. Add one row to `github_study_prompt/courses/catalog.md`'s table: title,
-   level, weeks, pacing, chapters, file, one-line description.
-3. **Never commit or push it.** Tell the user the file path, and that it goes
-   public only after they've audited it and explicitly said to publish.
-
-Either way, spot-check one rendered banner before calling it done: it must
+Spot-check one rendered banner before calling it done: it must
 start with `SYNTHESIZED CURRICULUM` and show each chapter as `Chapter N —
 Title:` with its key terms and ordered objectives as bullets. A bare chapter
 line means a `chapter-topic-add` label didn't match (use the same "Chapter N"
@@ -154,9 +141,8 @@ number in both commands).
 
 ## Step 5: close out
 
-Tell the user: the course id, chapter and week counts, which output(s) were
-produced (events synced, and/or the `.ics` path + catalog row awaiting their
-audit), and that in the study chat it appears under **Self-study courses**,
+Tell the user: the course id, chapter and week counts, how many events were
+synced, and that in the study chat it appears under **Self-study courses**,
 opened directly (never via Automatic).
 
 ## Rules that apply throughout (see CLAUDE.md invariant 35)

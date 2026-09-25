@@ -14,13 +14,12 @@ import json
 import uuid
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
-from sqlalchemy.orm import Session
 
 from academic_sync import completeness as completeness_mod
 from academic_sync import diagnostics as diagnostics_mod
@@ -84,7 +83,6 @@ from academic_sync.sync.calendar_payload import (
     format_details_blocks,
     platform_label_for_source,
 )
-from academic_sync.sync.ics_export import IcsEvent, build_ics
 from academic_sync.sync.planner import compute_plan
 
 app = typer.Typer(help="academic-sync: D2L -> normalized academic model -> Google Calendar.")
@@ -647,51 +645,6 @@ def weekly_reading_add_cmd(
         console.print(f"[green]Saved[/green] weekly reading block {row.id} for {course}.")
 
 
-@app.command("export-ics")
-def export_ics_cmd(
-    course: Annotated[str, typer.Option("--course")],
-    out: Annotated[Path, typer.Option("--out", help="Where to write the .ics file.")],
-) -> None:
-    """Write every syncable item of a course to one .ics file, rendered
-    through exactly the same path as `render` -- for sharing a course (e.g. a
-    premade synthetic one in the study-prompt-system repo's courses/ folder)
-    that anyone can import into Google Calendar. Never includes guests or
-    conference links. Stable UIDs (the item fingerprint) mean re-importing an
-    updated file updates events instead of duplicating them."""
-    with session_scope() as session:
-        resolved = _resolve_course_or_exit(session, course)
-        events: list[IcsEvent] = []
-        skipped = 0
-        for item in repository.list_items_for_course(session, resolved.id):
-            if (
-                item.item_type == ItemType.READING
-                or item.status == ItemStatus.SUPERSEDED
-                or not item.is_ready_to_sync()
-                or not item.fingerprint
-            ):
-                skipped += 1
-                continue
-            payload, _calendar_id = _render_item_payload(
-                session, item, resolved, nesting=item.module_label,
-            )
-            events.append(IcsEvent(uid=f"{item.fingerprint}@study-prompt-system", payload=payload))
-        if not events:
-            console.print(f"[red]{resolved.course_code} has no syncable items to export.[/red]")
-            raise typer.Exit(1)
-        stamp_date = resolved.start_date or date(2000, 1, 1)
-        text_out = build_ics(
-            resolved.name,
-            events,
-            dtstamp=datetime(stamp_date.year, stamp_date.month, stamp_date.day, tzinfo=UTC),
-        )
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(text_out.encode("utf-8"))
-    console.print(
-        f"[green]Wrote[/green] {len(events)} event(s) to {out}"
-        + (f" ({skipped} unsyncable item(s) skipped)" if skipped else "")
-    )
-
-
 @app.command("chapter-topic-add")
 def chapter_topic_add_cmd(
     course: Annotated[str, typer.Option("--course")],
@@ -914,78 +867,6 @@ def record_sync_cmd(
     console.print("[green]Recorded.[/green]")
 
 
-def _render_item_payload(
-    session: Session,
-    item: AcademicItem,
-    course: Course,
-    *,
-    nesting: str | None,
-    details: str | None = None,
-    required_resources: str | None = None,
-    location_info: LocationInfo | None = None,
-) -> tuple[dict[str, Any], str]:
-    """The one render path shared by `render` and `export-ics`: picks the
-    right description builder for the item, then builds the full Calendar
-    payload. Returns (payload, target calendar id)."""
-    config = get_config()
-    color_id = str(
-        repository.get_preference(session, "calendar_color_id", default=config.calendar.color_id)
-    )
-    calendar_id = str(
-        repository.get_preference(
-            session, "target_calendar_id", default=config.calendar.target_calendar_id
-        )
-    )
-    timezone = str(repository.get_preference(session, "timezone", default=config.timezone))
-    is_physical_meeting = item.item_type.is_fixed_time_meeting and item.due_time is None
-
-    primary_source = (
-        repository.get_source(session, item.source_ids[0]) if item.source_ids else None
-    )
-    platform_label = platform_label_for_source(primary_source)
-
-    if item.item_type == ItemType.WEEKLY_READING:
-        # Auto-pull saved chapter topics (CLAUDE.md invariant 26) --
-        # THIS WEEK becomes the real vocabulary/objectives breakdown
-        # for any chapter that's been captured via `chapter-topic-add`,
-        # instead of the bare chapter-list line. Only switches to the
-        # richer rendering once at least one real chapter topic is
-        # found; with none found, this_week stays None and
-        # build_weekly_reading_description falls back to its original
-        # bare _topic_line(item.title) behavior unchanged.
-        segments = split_chapter_segments(item.title) if item.title else []
-        topics_by_label: dict[str, ChapterTopic] = {}
-        for label, _text in segments:
-            if label is None:
-                continue
-            topic = repository.get_chapter_topic(session, item.course_id, label)
-            if topic is not None:
-                topics_by_label[canonicalize_chapter_label(label)] = topic
-        this_week = None
-        if topics_by_label:
-            block_dicts = build_chapter_topic_blocks(segments, topics_by_label)
-            this_week = format_details_blocks([DetailsBlock(**b) for b in block_dicts])
-        description = build_weekly_reading_description(
-            item, course, this_week=this_week, pacing=details,
-        )
-    elif is_physical_meeting:
-        description = build_meeting_description(
-            item, course, location=location_info, nesting=nesting, details=details,
-            platform_label=platform_label,
-        )
-    else:
-        description = build_deadline_description(
-            item, course, nesting=nesting, details=details, required_resources=required_resources,
-            platform_label=platform_label,
-        )
-
-    payload = build_event_payload(
-        item, course, timezone=timezone, color_id=color_id,
-        description=description, location=location_info,
-    )
-    return payload, calendar_id
-
-
 @app.command("render")
 def render_cmd(
     item_id: Annotated[str, typer.Argument()],
@@ -1163,6 +1044,17 @@ def render_cmd(
         if save:
             repository.upsert_academic_item(session, item)
 
+        config = get_config()
+        color_id = str(
+            repository.get_preference(session, "calendar_color_id", default=config.calendar.color_id)
+        )
+        calendar_id = str(
+            repository.get_preference(
+                session, "target_calendar_id", default=config.calendar.target_calendar_id
+            )
+        )
+        timezone = str(repository.get_preference(session, "timezone", default=config.timezone))
+
         is_physical_meeting = item.item_type.is_fixed_time_meeting and item.due_time is None
         if location and not is_physical_meeting:
             console.print(
@@ -1174,6 +1066,11 @@ def render_cmd(
             )
             location = None
         location_info = LocationInfo(platform_location=location) if location else None
+
+        primary_source = (
+            repository.get_source(session, item.source_ids[0]) if item.source_ids else None
+        )
+        platform_label = platform_label_for_source(primary_source)
 
         if details_blocks is not None:
             try:
@@ -1191,9 +1088,44 @@ def render_cmd(
                 raise typer.Exit(1) from None
             details = format_details_blocks(blocks)
 
-        payload, calendar_id = _render_item_payload(
-            session, item, course, nesting=nesting, details=details,
-            required_resources=required_resources, location_info=location_info,
+        if item.item_type == ItemType.WEEKLY_READING:
+            # Auto-pull saved chapter topics (CLAUDE.md invariant 26) --
+            # THIS WEEK becomes the real vocabulary/objectives breakdown
+            # for any chapter that's been captured via `chapter-topic-add`,
+            # instead of the bare chapter-list line. Only switches to the
+            # richer rendering once at least one real chapter topic is
+            # found; with none found, this_week stays None and
+            # build_weekly_reading_description falls back to its original
+            # bare _topic_line(item.title) behavior unchanged.
+            segments = split_chapter_segments(item.title) if item.title else []
+            topics_by_label: dict[str, ChapterTopic] = {}
+            for label, _text in segments:
+                if label is None:
+                    continue
+                topic = repository.get_chapter_topic(session, item.course_id, label)
+                if topic is not None:
+                    topics_by_label[canonicalize_chapter_label(label)] = topic
+            this_week = None
+            if topics_by_label:
+                block_dicts = build_chapter_topic_blocks(segments, topics_by_label)
+                this_week = format_details_blocks([DetailsBlock(**b) for b in block_dicts])
+            description = build_weekly_reading_description(
+                item, course, this_week=this_week, pacing=details,
+            )
+        elif is_physical_meeting:
+            description = build_meeting_description(
+                item, course, location=location_info, nesting=nesting, details=details,
+                platform_label=platform_label,
+            )
+        else:
+            description = build_deadline_description(
+                item, course, nesting=nesting, details=details, required_resources=required_resources,
+                platform_label=platform_label,
+            )
+
+        payload = build_event_payload(
+            item, course, timezone=timezone, color_id=color_id,
+            description=description, location=location_info,
         )
 
     # The description contains literal "[academic-sync:fp:...]" text (the
