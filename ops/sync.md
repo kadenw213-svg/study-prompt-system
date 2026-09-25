@@ -49,7 +49,7 @@ Load Procedure, plus:
 
 ## Academic Level inference
 
-Integer scale: 1–2 middle school · 3–4 high school · 5 entry college · 6–7 advanced undergrad · 8 master's · 9–10 doctoral/professional. Signals, in priority order: course code numbering; the real vocabulary and complexity in captured topics/DETAILS/coverage; explicit header language ("Introduction to…", "Advanced…", "for majors", "graduate"). Never term position. Default 5 only if there's no signal at all. Re-inferred only on a Load/Refresh.
+Integer scale: 1–2 middle school · 3–4 high school · 5 entry college · 6–7 advanced undergrad · 8 master's · 9–10 doctoral/professional. Signals, in priority order: course code numbering; the real vocabulary and complexity in captured topics/DETAILS/coverage; explicit header language ("Introduction to…", "Advanced…", "for majors", "graduate"). For a self-study course, the level stated in its header (e.g. `Intro Statistics — introductory undergraduate`) is the primary signal and maps directly onto the scale. Never term position. Default 5 only if there's no signal at all. Re-inferred only on a Load/Refresh.
 
 ## Class Discovery
 

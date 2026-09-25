@@ -99,10 +99,15 @@ partial yes. Apply requested edits and re-show the changed parts.
 1. Register the course once:
    ```
    uv run academic-sync course add \
-     --code "<topic name>" --name "<topic name>" --term "<term>" \
+     --code "<topic name>" --name "<topic name> — <academic level>" --term "<term>" \
      --start <start_date> --end <computed_end_date> --synthetic
    ```
-   Never pass `--instructor`/`--instructor-contact` (a synthetic course has no
+   `--name` must carry the Step 0 academic level in plain words (e.g. `"Intro
+   Statistics — introductory undergraduate"`). It renders into every event's
+   header line, and it's the only place the GPT study system learns the
+   course's level (its Academic Level inference reads that header). Keep
+   `--code` the bare topic name, since it's the course's identifier in every
+   event title. Never pass `--instructor`/`--instructor-contact` (a synthetic course has no
    CONTACT section). Run exactly once -- re-running `course add` without
    `--synthetic` would clear the flag.
 2. Every chapter:
