@@ -1,6 +1,6 @@
 ---
 name: custom-curriculum
-description: Build a fully synthetic, self-directed "class" on a topic the user describes -- no real D2L source -- as weekly overview banners carrying a full chapter-by-chapter teaching outline (ordered objectives + key terms), so the GPT study system can teach it as a complete, coherent course. Syncs to Google Calendar. Use when the user wants to study a topic on their own schedule.
+description: Build a fully synthetic, self-directed "class" on a topic the user describes -- no real D2L source -- as weekly overview banners that list each week's chapters with real readings found online (OpenStax, LibreTexts, MIT OCW, university course pages), plus a full objectives outline the GPT quiz system tests from. Syncs to Google Calendar. Use when the user wants to study a topic on their own schedule.
 user-invocable: true
 ---
 
@@ -13,25 +13,25 @@ This skill authors a complete course -- a week-by-week sequence **and a full
 teaching outline for every chapter** -- for a class that doesn't exist
 anywhere but here, registers it in the same local database real scraped
 courses live in, and syncs it to Google Calendar in
-exactly the format `academic-import` produces. The GPT study system (the
-`study-prompt-system` repo's `boot.md` + `engine/`/`modes/` rule files, one
-level above `claude-project/`) reads each weekly banner's THIS WEEK section
-as its curriculum for that week, then teaches it in teaching mode.
-Self-study courses are never part of its Automatic mode; the user opens
-them deliberately. Read `CLAUDE.md` invariant 35 before your first run in a
+exactly the format `academic-import` produces. The user **learns from real
+readings linked on each banner** (found online in Step 1b). The GPT quiz
+system (the `study-prompt-system` repo) reads each banner's TOPIC DETAIL
+and gives 10 quiz-style questions over everything covered so far, so the
+material sticks. GPT teaching mode was retired 2026-10-05. Read `CLAUDE.md` invariant 35 before your first run in a
 session -- it's the authoritative carve-out this skill operates under.
 
 **Working directory**: the `academic-sync` project at the repository root.
 All CLI commands are `uv run academic-sync ...` via Bash.
 
-**Live tools**: `mcp__claude_ai_Google_Calendar__*`, in Step 4 only. Nothing here touches D2L or a browser.
+**Live tools**: `WebSearch` / `WebFetch` in Step 1b, to find and verify real
+readings. `mcp__claude_ai_Google_Calendar__*` in Step 4. Nothing here
+touches D2L.
 
 **What this skill produces**: `WEEKLY_READING` banners only, plus one
 `chapter-topic-add` row per chapter, which `render` automatically pulls into
-each banner's THIS WEEK. **No quizzes, exams, homework, assignments,
-deadlines, or meetings -- ever** (user-directed 2026-09-25). Practice comes
-from the GPT system's own teaching mode (comprehension questions, chapter
-checkpoints, scored batches).
+each banner, plus real reading/resource links. **No quizzes, exams,
+homework, assignments, deadlines, or meetings -- ever** (user-directed
+2026-09-25). Practice comes from the GPT quiz system's 10-question sets.
 
 ## Step 0: gather inputs
 
@@ -61,8 +61,8 @@ chapter, write:
 
 - **Title**: a short, specific name ("Linear Independence and Span", not
   "More Vectors").
-- **Objectives**: 6-12, **in teaching order** -- the order the GPT tutor
-  should teach them in, each building on the last. Each one is one concrete,
+- **Objectives**: 6-12, in learning order, each building on the last. The
+  GPT quiz system tests every one. Each one is one concrete,
   teachable, checkable learning goal naming the specific concept or skill
   and the depth expected ("Compute the determinant of a 3x3 matrix by
   cofactor expansion", not "Understand determinants"). Include:
@@ -83,12 +83,45 @@ description limit (roughly 3 chapters at full depth); a week that would
 exceed that gets fewer chapters. `render` truncates visibly if it has to, but
 that means the plan was too dense.
 
+## Step 1b: find real readings for every chapter (user-directed 2026-10-05)
+
+A self-study course should be read from real material, the way a D2L
+course is read from its real textbook. For each chapter, search the web
+(`WebSearch`) for **official, openly available college course material**
+on exactly that chapter's topic, in this order of preference:
+
+1. **An open textbook chapter or section page**: OpenStax, LibreTexts,
+   the Open Textbook Library, or a university press open edition.
+2. **University course pages**: MIT OpenCourseWare lecture notes and
+   readings, other universities' public course sites.
+3. **Recorded lectures** from those same sources (MIT OCW video, a
+   university's official channel).
+
+For each find:
+- **Verify it** with `WebFetch`: the page loads and covers this chapter's
+  topic at this level. Never link a page you didn't open. Never link
+  paywalled, pirated, or content-farm material.
+- **The reading** becomes the chapter's `--reading-url` /
+  `--reading-label`, e.g. `"OpenStax Calculus Vol 1 — 3.2 The Derivative
+  as a Function"`.
+- **Its real section headings** become `--section` values (the "Big
+  topics" line). These come from the source, so they aren't authored
+  content.
+- **Lecture notes, videos, and problem sets** become that week's `--links`
+  entries with a `kind` (`video`, `handout`, `other`).
+- **Prefer one coherent primary text across the whole course** (e.g. one
+  OpenStax book) so chapter readings follow one progression. Add a
+  second source only where the primary doesn't cover a chapter.
+- **If nothing reputable covers a chapter, leave its links empty.** Say
+  so in Step 2 rather than linking something weak.
+
 ## Step 2: present for explicit approval (mandatory gate)
 
 Show everything before any write: topic, level, weeks, pacing tier + hour
 range, start date, the week-by-week plan (one line per week
 with its date range and chapters), then **every chapter's full outline**
-(title, ordered objectives, key terms).
+(title, ordered objectives, key terms) **with its reading link, section
+headings, and resource links** from Step 1b.
 
 The user's approval *is* what makes this content legitimate for this course
 type (CLAUDE.md invariant 35). Don't skip it or proceed on an ambiguous or
@@ -115,7 +148,9 @@ partial yes. Apply requested edits and re-show the changed parts.
    uv run academic-sync chapter-topic-add --course <course_id> \
      --chapter "Chapter N" --title "<title>" \
      --vocabulary "<term>, <term>, ..." \
-     --objective "<objective 1>" --objective "<objective 2>" ...
+     --objective "<objective 1>" --objective "<objective 2>" ... \
+     --section "<source section heading>" ... \
+     --reading-url "<verified url>" --reading-label "<source — section>"
    ```
    Objectives in teaching order. **Never pass `--exhaustive`** -- that flag
    certifies a real platform's complete topic list and has no meaning here.
@@ -123,7 +158,8 @@ partial yes. Apply requested edits and re-show the changed parts.
    ```
    uv run academic-sync weekly-reading-add \
      --course <course_id> --week-start <date> --week-end <date> \
-     --chapters "Chapter N: <title>; Chapter M: <title>"
+     --chapters "Chapter N: <title>; Chapter M: <title>" \
+     --links '[{"label": "MIT OCW Lecture 5 video", "url": "...", "kind": "video"}]'
    ```
    Use the same chapter titles as step 2 so each banner's label matches its
    saved topic. All three commands are idempotent -- re-running corrects the
@@ -133,22 +169,23 @@ partial yes. Apply requested edits and re-show the changed parts.
 
 Reuse `academic-import`'s Step 5 flow exactly: for each
 banner, `uv run academic-sync render <item_id> --json` (it auto-pulls the
-saved chapter topics into THIS WEEK) → `mcp__claude_ai_Google_Calendar__
+saved chapter topics into READING and TOPIC DETAIL) → `mcp__claude_ai_Google_Calendar__
 create_event` → `uv run academic-sync record-sync <item_id> --event-id <id>
 --calendar-id <calendar_id>` right after each successful write. Batch
 independent creates.
 
-Spot-check one rendered banner before calling it done: it must
-start with `SYNTHESIZED CURRICULUM` and show each chapter as `Chapter N —
-Title:` with its key terms and ordered objectives as bullets. A bare chapter
-line means a `chapter-topic-add` label didn't match (use the same "Chapter N"
-number in both commands).
+Spot-check one rendered banner before calling it done. It must start with
+`SYNTHESIZED CURRICULUM`. Each chapter must appear under READING with its
+"Big topics" line and reading link, and under TOPIC DETAIL with its key
+terms and ordered objectives. A bare chapter line means a
+`chapter-topic-add` label didn't match; use the same "Chapter N" number in
+both commands.
 
 ## Step 5: close out
 
 Tell the user: the course id, chapter and week counts, how many events were
-synced, and that in the study chat it appears under **Self-study courses**,
-opened directly (never via Automatic).
+synced, and that it appears under **Self-study courses** in the GPT quiz
+chat.
 
 ## Rules that apply throughout (see CLAUDE.md invariant 35)
 

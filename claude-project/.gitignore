@@ -16,6 +16,7 @@ data/*.sqlite
 data/*.sqlite3
 data/downloads/
 data/logs/
+data/digests/
 
 # Python
 __pycache__/

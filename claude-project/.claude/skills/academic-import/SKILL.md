@@ -1,6 +1,6 @@
 ---
 name: academic-import
-description: Discover academic obligations from a D2L/Brightspace course for the FIRST time and run them through the local extraction/completeness/reconciliation pipeline into Google Calendar. Use when the user wants to register and fully scan a brand-new course. For a course already scanned before, use /academic-sync instead (light re-scan, link refresh, weekly grade diagnostic).
+description: Discover academic obligations from a D2L/Brightspace course for the FIRST time and run them through the local extraction/completeness/reconciliation pipeline into Google Calendar. Use when the user wants to register and fully scan a brand-new course. For a course already scanned before, use /academic-sync instead (light re-scan, link refresh); daily grades/announcements are /daily-overview.
 user-invocable: true
 ---
 
@@ -17,9 +17,9 @@ idempotency, completeness rules) apply to every step below, not just to the
 Python code.
 
 **This skill is for first-time discovery only.** Recurring maintenance on a
-course already scanned before -- light-crawl re-scans, link refresh, and the
-weekly grade diagnostic ("Previous Week Diagnostic" banner) -- lives in
-`/academic-sync` instead; see that skill's SKILL.md. Step 0 below tells you
+course already scanned before -- light-crawl re-scans and link refresh --
+lives in `/academic-sync` instead, and daily grade/announcement/feedback
+news lives in `/daily-overview`. Step 0 below tells you
 how to recognize which case you're in.
 
 **Working directory**: this skill operates on the `academic-sync` project at
@@ -94,8 +94,8 @@ it's pointed at -- there is no other per-person code path.
    areas from a prior session, this is a **recurring run**, not a
    first-time scan -- stop here, tell the user this course was already
    scanned, and point them at `/academic-sync` instead (light-crawl
-   re-scan, link refresh, and the weekly grade diagnostic all live there
-   now). A course with no prior sync history gets the full first-time crawl
+   re-scan and link refresh live there; daily grades and feedback live in
+   `/daily-overview`). A course with no prior sync history gets the full first-time crawl
    below, every time -- that's the only case this skill still handles.
 
 ## Step 1: SCAN (D2L, live)
@@ -130,7 +130,8 @@ For each course to scan:
    built from (CLAUDE.md invariant 25, required for every week of the
    term, not just the current one); and **where each chapter/unit's real,
    complete topic/subtopic breakdown lives** (finding 6) -- what
-   `chapter-topic-add` pulls from, so a weekly banner's THIS WEEK can
+   `chapter-topic-add` pulls from, so a weekly banner's READING (section
+   headings + the chapter's own reading link) and TOPIC DETAIL can
    auto-show real depth instead of a bare chapter list (CLAUDE.md
    invariant 26, amended 2026-08-25 -- capture must be exhaustive, and
    never from a platform's personalized/adaptive "what's next" view; see
@@ -408,7 +409,9 @@ Use `--details` for a simple pacing note,
 e.g. "Ch. 12 by Wednesday, Ch. 13 by Friday" (omit entirely when the
 source doesn't differentiate timing within the week) -- this is the only
 thing `--details` means for a weekly reading item now (see the next
-paragraph for THIS WEEK's actual content).
+paragraph for READING / TOPIC DETAIL's actual content, and
+`docs/d2l_discovery.md#weekly-reading-blocks` for the 2026-10-05 banner
+layout: READING first, then SLIDES & RESOURCES, then TOPIC DETAIL).
 
 **Before `render`-ing a weekly reading item, make sure `chapter-topic-add`
 has been run for its chapters -- this is also a required, non-optional
@@ -422,8 +425,19 @@ uv run academic-sync chapter-topic-add --course CODE --chapter "Chapter 23" \
   --vocabulary "microevolution, genetic variation, ..." \
   --objective "Explain the major processes that generate genetic variation" \
   --objective "State the Hardy-Weinberg theorem of genetic equilibrium" \
+  --section "23.1 Genetic Variation Makes Evolution Possible" \
+  --section "23.2 The Hardy-Weinberg Equation" \
+  --reading-url "<the chapter's own reading page, opened and confirmed stable>" \
+  --reading-label "Textbook — Ch 23 reading" \
   --exhaustive
 ```
+
+`--section` (the chapter's real section headings, rendered as the "Big
+topics" line) and `--reading-url` (the chapter-specific reading) are
+required finds for every chapter, same as objectives. Search inside the
+eBook or platform rather than stopping at its launch tile; see
+`docs/d2l_discovery.md#external-courseware-platforms----detect-the-link-not-the-tool-name`
+step 7.
 
 Every `--vocabulary`/`--objective` value must trace to real
 instructor-authored material (chapter objectives doc, study guide, that
@@ -446,8 +460,9 @@ partial; `completeness` distinguishes the two
 unconfirmed chapter still gets flagged for a follow-up pass instead of
 looking done. Idempotent by (course, chapter label), same as
 `weekly-reading-add`. Once saved, `render` on that course's weekly reading
-item **automatically pulls it into THIS WEEK** -- real vocabulary and
-bulleted objectives per chapter instead of a bare chapter-list line,
+item **automatically pulls it in** -- section headings and the reading
+link under READING, real vocabulary and bulleted objectives under TOPIC
+DETAIL, instead of a bare chapter-list line,
 nothing else to do (a very large capture may get truncated in the
 rendered description against Google Calendar's real length limit -- see
 `docs/d2l_discovery.md#calendar-description-length-budget` -- the full
@@ -594,6 +609,12 @@ excluding anything they flagged):
      `reference_url`); finding one is not a reason to stop looking for the
      other, and `completeness` gates on `reference_url` specifically
      (CLAUDE.md invariant 17). Full policy: `docs/d2l_discovery.md#links-academicitemreferenceurlreferenceurllabel-academicitemresourceurlresourceurllabel`.
+   - **Exams and quizzes: open each one's own instructions page.** If it
+     says the work is submitted separately (a "Show Work" or scratch-work
+     dropbox), that dropbox is a required find. Set it as the exam's
+     `--submission-url` (it renders as **Submit Work**). Also extract the
+     dropbox's real name and due date so it becomes its own deadline item
+     and event (see the `submission_url` part of `docs/d2l_discovery.md#links`).
    - Working with a course structure or LMS that doesn't match D2L's
      layout (a future term, a different institution)? See
      `docs/d2l_discovery.md#working-with-an-unfamiliar-lms-or-page-format` --

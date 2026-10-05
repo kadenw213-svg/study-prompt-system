@@ -400,6 +400,60 @@ def test_render_weekly_reading_falls_back_to_bare_topic_line_with_no_saved_topic
     result = runner.invoke(app, ["render", item_id])
     assert result.exit_code == 0
     normalized = " ".join(result.stdout.split())
-    # Original bare _topic_line multi-chapter rendering, unchanged, when nothing's saved.
-    assert "Chapter 23:<br>Evolution of Populations;" in normalized
-    assert "Chapter 26:<br>Phylogeny and Classification;" in normalized
+    # Nothing saved: READING still lists every chapter by name, no TOPIC DETAIL.
+    assert "<b>Chapter 23 — Evolution of Populations</b>" in normalized
+    assert "<b>Chapter 26 — Phylogeny and Classification</b>" in normalized
+    assert "TOPIC DETAIL" not in normalized
+
+
+def test_chapter_topic_reading_link_and_sections_render_in_banner(tmp_path):
+    _isolated_db(tmp_path)
+    course_id = _make_course(tmp_path)
+    added = runner.invoke(
+        app,
+        [
+            "chapter-topic-add", "--course", course_id, "--chapter", "Chapter 23",
+            "--section", "23.1 Genetic Variation", "--section", "23.2 Hardy-Weinberg",
+            "--reading-url", "https://ebook.example/ch23",
+            "--reading-label", "Textbook — Ch 23 reading",
+        ],
+    )
+    assert added.exit_code == 0, added.stdout
+    # A later objectives-only pass must not blank the saved reading link/sections.
+    runner.invoke(
+        app,
+        ["chapter-topic-add", "--course", course_id, "--chapter", "Chapter 23", "--objective", "A"],
+    )
+    item_id = _make_weekly_reading_item(tmp_path, course_id, "Chapter 23: Evolution of Populations")
+
+    result = runner.invoke(app, ["render", item_id, "--json"])
+    assert result.exit_code == 0, result.stdout
+    description = json.loads(result.stdout)["description"]
+    assert "Big topics: 23.1 Genetic Variation · 23.2 Hardy-Weinberg" in description
+    assert '→ <a href="https://ebook.example/ch23">Textbook — Ch 23 reading</a>' in description
+    assert "• A" in description
+
+
+def test_links_rejects_unknown_kind(tmp_path):
+    _isolated_db(tmp_path)
+    course_id = _make_course(tmp_path)
+    item_id = _make_weekly_reading_item(tmp_path, course_id, "Chapter 23: Evolution of Populations")
+    result = runner.invoke(
+        app, ["render", item_id, "--links", '[{"label": "X", "url": "https://x", "kind": "podcast"}]'],
+    )
+    assert result.exit_code == 1
+
+
+def test_render_submission_url_saved_and_rendered(tmp_path):
+    _isolated_db(tmp_path)
+    item_id = _make_course_with_item(tmp_path)
+    result = runner.invoke(
+        app,
+        ["render", item_id, "--submission-url", "https://d2l.example/dropbox/9", "--save", "--json"],
+    )
+    assert result.exit_code == 0, result.stdout
+    description = json.loads(result.stdout)["description"]
+    assert '<a href="https://d2l.example/dropbox/9">Submit Work</a>' in description
+    with session_scope() as session:
+        item = repository.get_academic_item(session, item_id)
+    assert item is not None and item.submission_url == "https://d2l.example/dropbox/9"

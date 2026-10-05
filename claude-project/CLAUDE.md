@@ -27,7 +27,8 @@ Then reply:
 
 > Ready. Skills:
 > - `/academic-import` -- first-time scan of a D2L course into Google Calendar
-> - `/academic-sync` -- weekly re-scan, link refresh, and grade check
+> - `/academic-sync` -- re-scan, build next weeks' banners, link refresh
+> - `/daily-overview` -- 5am per-class email: announcements, grades, feedback, deadlines
 > - `/academic-prefs` -- view/change preferences
 > - `/custom-curriculum` -- build a self-directed course on any topic
 > - `/audio-lectures` -- turn the week's material into narrated audio
@@ -268,6 +269,19 @@ to add either; that decision was deliberate, not an oversight.
     (ALEKS-style) where the "go do the work" link *is* the submission
     mechanism.
 
+    **Amended 2026-10-05 -- a separate turn-in location gets its own slot
+    and its own event.** Real incident: an exam's own page said to submit
+    the work separately to a Dropbox folder, but that graded deliverable
+    was linked nowhere on the calendar. `AcademicItem.submission_url`/
+    `submission_url_label` (migration `_0016`, in `_COMPARED_FIELDS` and
+    `upsert_academic_item`'s enrichment-preservation loop) render as a
+    **Submit Work** link alongside `reference_url`. The separate
+    submission also becomes its own deadline item, extracted from the
+    dropbox's real text, so it has a sourced date and its own fingerprint.
+    Opening every exam/quiz's own instructions page is part of the scan.
+    Any "submit your work separately" language makes that dropbox a
+    required find. See `docs/d2l_discovery.md#links`.
+
 18. **A gathered field that isn't wired into the render path doesn't count
     as gathered.** The same 2026-08-18 session found that `render`'s
     `--nesting`/`--details` CLI options were render-time-only -- even after
@@ -504,6 +518,36 @@ to add either; that decision was deliberate, not an oversight.
     `weekly_links_json` (no rename migration -- the field just isn't
     banner-only anymore).
 
+    **Amended 2026-10-05 -- the banner is the course shell.** User-directed:
+    GPT teaching mode was retired, so the student learns directly from the
+    real curriculum the banner links. `build_weekly_reading_description`
+    renders, in this order:
+    - **READING** -- every chapter that week. Each gets its real section
+      headings (`ChapterTopic.sections`) as a short "Big topics" line,
+      then its chapter-specific reading link (`ChapterTopic.reading_url`/
+      `reading_label`; migration `_0016`).
+    - **SLIDES & RESOURCES** -- every non-textbook `weekly_links` entry,
+      grouped by `WeeklyLink.kind`.
+    - **PACING**.
+    - **TOPIC DETAIL** -- the full saved objectives + vocabulary, never
+      summarized. The GPT quiz system's question pool comes from it, and
+      it is the only block the length budget may truncate.
+    - **CONTACT**, then **DATES**.
+
+    Reading links are stored once per chapter so every banner and lecture
+    covering it reuses one verified URL. Section headings follow
+    invariant 22's bar: the source's own structure, never a summary.
+    Finding a per-chapter reading URL means searching inside the
+    eBook/platform, not stopping at its launch tile (invariant 20's
+    platform section, step 7). `WeeklyLink` gained optional
+    `kind`/`chapter`; links saved without a `kind` are classified from
+    their label at render time. `snapshot_compared_fields` appends
+    kind/chapter only when set, and `decide_action` compares snapshots
+    field-by-field with `.get()`, so a newly compared field never shows
+    up as spurious drift on items synced before it existed. Changing a
+    `ChapterTopic` does not by itself mark synced banners as changed:
+    re-render and push the banners covering it.
+
 26. **Chapter/unit topic breakdowns are a required find, saved as durable
     reference data -- not just typed into one Calendar event's
     description.** User-directed, 2026-08-24: testing invariant 25's
@@ -581,7 +625,7 @@ to add either; that decision was deliberate, not an oversight.
     DESCRIPTION_CHAR_BUDGET`; see docs/d2l_discovery.md's "Calendar
     description length budget" section for the citation and full
     behavior). `_assemble_within_budget`/`_truncate_html_block` truncate
-    only the one large, variable-length content block (THIS WEEK/DETAILS)
+    only the one large, variable-length content block (TOPIC DETAIL/DETAILS)
     when a rendered description would exceed it, visibly noting how many
     real captured lines were left out -- the small, always-wanted sections
     (header/MODULE/CONTACT/LINKS/DATES) are never sacrificed, and the full
@@ -821,6 +865,23 @@ to add either; that decision was deliberate, not an oversight.
     was reversed by the user before shipping). Practice comes entirely
     from the GPT system's teaching mode. The GPT system lists synthetic
     courses separately and never includes them in its Automatic mode.
+    **Amended 2026-10-05 -- real readings, quiz-only GPT.**
+    - GPT teaching mode was retired. The GPT system (`study-prompt-system`
+      repo) is now quiz-only: pick a class (self-study courses included),
+      get 10 exam-style questions over everything covered so far, and see
+      only the misses explained, with a textbook-section link.
+    - `custom-curriculum` now **finds real, openly available college
+      material on the web** for each chapter (OpenStax, LibreTexts, MIT
+      OCW, university course pages) and verifies each page loads before
+      saving it:
+      - the reading becomes `chapter-topic-add --reading-url`;
+      - its own section headings become `--section`;
+      - lecture notes/videos become banner `--links`.
+    - Those links are real sources, not authored content. The authored
+      parts (sequence, objectives) still carry the `SYNTHESIZED
+      CURRICULUM` tag.
+    - Synthetic courses get no Daily Overview email (invariant 38).
+
     Migration `_0015_add_item_mock_spec` (and its unused
     `academic_items.mock_spec_json` column) stays in `MIGRATIONS` only
     because it already ran on the local DB: removing it would make the
@@ -932,6 +993,89 @@ to add either; that decision was deliberate, not an oversight.
     real Tab keypress (it types as a space) -- use a separate real `Tab`
     keypress between fields.
 
+    **Amended 2026-10-05 -- the weekly diagnostic event is retired, folded
+    into the daily email.** User-directed: the Daily Overview (invariant
+    38) reports newly graded work with verbatim feedback every morning,
+    plus missed deadlines with open/closed status. Its "Needs attention"
+    lines apply this invariant's Red rules daily (`digest.py` reuses
+    `diagnostics.py`'s thresholds), each reported once when it first
+    appears. That made the weekly "<CODE> Previous Week Diagnostic"
+    Calendar event redundant, so `/academic-sync` no longer creates it,
+    and the Sunday reminder event is retired too. The `diagnostic-*` CLI
+    commands and tables stay for history. The Drive `__signals` write
+    remains. `digest-ingest` prints `signal_candidates` (a major
+    assessment newly under 60% with a real chapter label), and the
+    browser write is the same as before.
+
+38. **The Daily Overview email relays what changed in the course shell --
+    sourced, deduped, deep-linked, never double-sent.** User-directed
+    2026-10-05: "remove the need for my interaction with the course
+    shell." `/daily-overview` runs at 5:00am every day via Windows Task
+    Scheduler (`scripts/daily_overview.ps1`, headless `claude -p
+    --chrome` with a narrow `--allowedTools` list).
+    - **One email per real course per day** (never synthetic), subject
+      `"Daily Overview <CODE>"`, sent only to the `digest_email_to`
+      preference from the connected Gmail account. Never cc/bcc, never
+      anyone else. The address lives in the preference and
+      `config/personal.local.md`, never in a committed file.
+    - **Content:**
+      - current grade (bold, with a trend);
+      - new needs-attention triggers;
+      - newly graded items, each with its link, exact score, verbatim
+        instructor comment, and feedback-page link;
+      - new announcements, with verbatim excerpts;
+      - missed-yesterday items (open/closed);
+      - due today, plus the next 3 days as context;
+      - Calendar changes made, and "needs you" items.
+    - **No readings** -- the banner is the reading list.
+    - **A quiet day sends nothing.** A failed login always sends, so a
+      broken run is never silent.
+    - **Scores, comments, and announcement text are verbatim** (invariant
+      1's bar). The only generated text is an optional, labeled `advice`
+      line, given only when the grade moved or new work was graded --
+      never a daily repeat of the same warning.
+    - **Dedupe:** `digest_entries` is unique per `(course, kind,
+      external_id)` with a content hash. Anything already emailed is
+      never re-sent unless its content changed; a regrade or new feedback
+      resurfaces as "updated". A course's first ingest baselines anything
+      older than 2 days.
+    - **No double-send:** `daily_digest_records` is unique per `(course,
+      date)`. Entries are marked emailed only after a real send
+      (`digest-record-sent --message-id`), so a failed send carries them
+      to the next run.
+    - **Links:** every item links to where the user acts. A separate
+      `submission_url` wins over `reference_url` for deadline links.
+      Static course URLs are saved once (`portal-link-set`,
+      `course_portal_links`) so the run navigates straight to them. Only
+      URLs actually opened are saved, never constructed.
+    - **Calendar upkeep:** the daily run may auto-sync CLEAR, fully
+      sourced CREATE/UPDATE entries under every existing invariant.
+      Anything ambiguous or conflicting goes in the email's "Needs you"
+      section instead.
+    - Code: `digest.py` (ingest model + section logic),
+      `sync/email_payload.py` (HTML), CLI `digest-deadlines` /
+      `digest-ingest` / `digest-render` / `digest-record-sent` /
+      `portal-link-set` / `portal-link-list`, migration `_0017`.
+
+39. **Clicking Sign In on the institution's pre-filled SSO login is
+    authorized; storing or typing the password never is.** User-directed
+    2026-10-05, so the 5am run can work unattended.
+    - **Allowed:** when D2L redirects to the institution's own SSO sign-in
+      page (its host is recorded in `config/personal.local.md`'s
+      `sso_host`; never named in a committed file) and the
+      username/password fields are already filled by the user's password
+      manager (Chrome or LastPass), Claude may click **Sign In**. If the fields are empty, Claude may click
+      the password manager's in-field fill icon once.
+    - **Never:** type, read out, copy, log, or store the password
+      anywhere -- not in the DB, not in any file, and certainly not in
+      the public `claude-project/` copy -- and never sign in on any other
+      site.
+    - **On failure** (an MFA/CAPTCHA prompt, empty fields after one fill
+      attempt, an error, or an unfamiliar page): the run continues with
+      `login_failed: true`, and each email says so at the top.
+    - This supersedes the older "the user always clicks Sign In" note,
+      for this one page only.
+
 A graded item can legitimately have no `reference_url`/`resource_url` for a
 reason other than "nobody looked": D2L showed it locked behind an explicit
 "Available on `<date>`" marker (lab kit tools and adaptive courseware do
@@ -997,19 +1141,25 @@ is not a Python-version quirk; it reproduces on 3.12 and 3.14 alike.
 - `.claude/skills/academic-sync/SKILL.md` -- everything recurring on a
   course `/academic-import` already scanned at least once (invariant 36):
   the light-crawl re-scan (`docs/d2l_discovery.md#recurring-runs----light-crawl`),
-  link refresh, and the weekly Red/Yellow/Green grade diagnostic
-  (invariant 37, `docs/d2l_discovery.md#weekly-grade-diagnostic-crawl`).
-  Owns the single recurring Sunday reminder Calendar event that covers both
-  link refresh and the grade diagnostic in one weekly nudge.
+  link refresh, and the Drive weakness-signal write. The weekly diagnostic
+  event and Sunday reminder were retired 2026-10-05; daily grade, feedback,
+  and announcement news moved to `/daily-overview` (invariants 37/38).
+- `.claude/skills/daily-overview/SKILL.md` -- the 5am unattended run
+  (invariant 38). It crawls each real course (D2L REST API via in-page
+  `fetch`, plus external gradebooks), ingests the crawl, and sends one
+  "Daily Overview <CODE>" email per course with news. It also does small
+  Calendar upkeep: CLEAR items and link refresh. Scheduled by
+  `scripts/register_daily_overview_task.ps1`.
 - `.claude/skills/academic-prefs/SKILL.md` -- thin wrapper over
   `academic-sync prefs`.
 - `.claude/skills/custom-curriculum/SKILL.md` -- builds a fully synthetic,
   self-directed "class" on a topic the user describes (no real D2L source),
   using the same `Course`/`AcademicItem` model and Calendar-rendering
   pipeline as a real course, flagged `Course.is_synthetic` -- see invariant
-  35. Its footprint is `WEEKLY_READING` banners carrying a full per-chapter
-  teaching outline (`chapter-topic-add`), synced to Calendar. No
-  assessments.
+  35. Its footprint is `WEEKLY_READING` banners linking real readings
+  found online, plus a full per-chapter objectives outline
+  (`chapter-topic-add`) that the GPT quiz system tests from. Synced to
+  Calendar. No assessments.
 - `.claude/skills/shift-sync/SKILL.md` -- unrelated to D2L/academics: mirrors
   the user's YMCA work-shift calendar onto their main calendar. Deliberately
   has no Python package/database of its own (see that file for why) -- don't
@@ -1052,7 +1202,8 @@ avoid duplicates.
 `sync/calendar_payload.py` produce ONE format for those two item shapes
 (a third builder, `build_weekly_reading_description`, exists for
 `WEEKLY_READING` items specifically -- see invariant 25 -- with its own
-smaller section set, `THIS WEEK`/`PACING`/`CONTACT`/`LINKS`, since
+smaller section set, `READING`/`SLIDES & RESOURCES`/`PACING`/`TOPIC DETAIL`/`CONTACT`/`DATES`
+(layout since 2026-10-05, invariant 25), since
 LOCATION/REQUIRED RESOURCES don't apply to a non-graded weekly block; it
 still follows every rule below -- HTML, omit-don't-pad, no SOURCE
 section). It's real HTML (Calendar

@@ -245,6 +245,31 @@ def _0015_add_item_mock_spec(session: Session) -> None:
         session.execute(text("ALTER TABLE academic_items ADD COLUMN mock_spec_json JSON"))
 
 
+def _0016_add_reading_and_submission_links(session: Session) -> None:
+    # 2026-10-05 course-shell redesign: chapter-level reading data
+    # (section headings + chapter-specific reading link) on chapter_topics,
+    # and a separate "Submit Work" slot on academic_items for exams whose
+    # work is turned in to a different dropbox. Additive columns only.
+    items = {row[1] for row in session.execute(text("PRAGMA table_info(academic_items)"))}
+    for col in ("submission_url", "submission_url_label"):
+        if col not in items:
+            session.execute(text(f"ALTER TABLE academic_items ADD COLUMN {col} VARCHAR"))
+    topics = {row[1] for row in session.execute(text("PRAGMA table_info(chapter_topics)"))}
+    if "sections_json" not in topics:
+        session.execute(text("ALTER TABLE chapter_topics ADD COLUMN sections_json JSON"))
+    for col in ("reading_url", "reading_label"):
+        if col not in topics:
+            session.execute(text(f"ALTER TABLE chapter_topics ADD COLUMN {col} VARCHAR"))
+
+
+def _0017_add_daily_digest_tables(session: Session) -> None:
+    # course_portal_links / digest_entries / daily_digest_records are
+    # brand-new tables -- Base.metadata.create_all (run before migrations)
+    # already creates them. No-op marker for schema-version history, same
+    # as _0007/_0013.
+    pass
+
+
 MIGRATIONS: list[MigrationFn] = [
     _0001_initial_schema,
     _0002_add_item_reference_urls,
@@ -261,6 +286,8 @@ MIGRATIONS: list[MigrationFn] = [
     _0013_add_grade_diagnostic_tables,
     _0014_weekly_diagnostic_records_per_course,
     _0015_add_item_mock_spec,
+    _0016_add_reading_and_submission_links,
+    _0017_add_daily_digest_tables,
 ]
 
 

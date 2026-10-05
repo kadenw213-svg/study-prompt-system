@@ -92,6 +92,20 @@ class WeeklyLink(BaseModel):
 
     label: str
     url: str
+    # Optional resource kind -- one of WEEKLY_LINK_KINDS. Drives grouping on
+    # a weekly banner (textbook readings render under READING, everything
+    # else under SLIDES & RESOURCES) and lets the quiz GPT match a link to a
+    # chapter. `None` on links saved before 2026-10-05; those are
+    # classified from their label at render time (see
+    # `sync/calendar_payload.py::link_kind`).
+    kind: str | None = None
+    # Optional chapter/unit label this link belongs to (e.g. "Chapter 23"),
+    # when discovery knows it -- lets a banner place a textbook link under
+    # its own chapter in READING instead of in a generic list.
+    chapter: str | None = None
+
+
+WEEKLY_LINK_KINDS = ("textbook", "slides", "video", "handout", "platform", "other")
 
 
 class AcademicItem(BaseModel):
@@ -121,6 +135,13 @@ class AcademicItem(BaseModel):
     reference_url_label: str | None = None
     resource_url: str | None = None
     resource_url_label: str | None = None
+    # A separate turn-in location distinct from the item's own page --
+    # e.g. an exam whose instructions say "submit your work separately"
+    # to a Dropbox folder. Renders as its own "Submit Work" link under
+    # LINKS. Never constructed or guessed -- only a URL discovery actually
+    # opened. See CLAUDE.md invariant 17 (amended 2026-10-05).
+    submission_url: str | None = None
+    submission_url_label: str | None = None
     # WEEKLY_READING and fixed-time meeting items: an arbitrary-length list
     # of that item's real resource links (a banner's lecture video / slide
     # deck / textbook reading; a lecture's own slides / handout / activity /
@@ -231,6 +252,17 @@ class ChapterTopic(BaseModel):
     vocabulary: str | None = None
     objectives: list[str] = Field(default_factory=list)
     is_exhaustive: bool = False
+    # The chapter's real section headings (e.g. textbook "23.1 Genetic
+    # Variation", or a module page's own sub-headings) -- rendered as the
+    # short "Big topics" line under the chapter in a banner's READING
+    # section. Same evidentiary bar as `objectives`: real structure from
+    # the source, never a generated summary (CLAUDE.md invariant 22).
+    sections: list[str] = Field(default_factory=list)
+    # The chapter-specific reading link (eBook chapter page, OpenStax
+    # chapter, D2L content topic) -- stored once on the chapter so every
+    # banner and lecture covering it reuses the same verified URL.
+    reading_url: str | None = None
+    reading_label: str | None = None
     source_ids: list[str] = Field(default_factory=list)
     source_wording: str | None = None
     first_seen: datetime | None = None
@@ -299,6 +331,77 @@ class WeeklyDiagnosticRecord(BaseModel):
     google_calendar_id: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+
+
+class CoursePortalLink(BaseModel):
+    """A static, bookmarkable URL into one of a course's own areas (home,
+    grades, announcements, content, dropbox list, an external platform's
+    gradebook...). Saved once so the daily run navigates straight to each
+    page instead of clicking through the course shell. Identity for upsert
+    is `(course_id, kind, label)`. Only URLs discovery actually opened --
+    never constructed. See CLAUDE.md invariant 38."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    course_id: str
+    kind: str
+    url: str
+    label: str = ""
+    updated_at: datetime | None = None
+
+
+PORTAL_LINK_KINDS = (
+    "home", "grades", "announcements", "content", "dropbox", "quizzes",
+    "discussions", "calendar", "external_home", "external_gradebook", "other",
+)
+
+
+class DigestEntry(BaseModel):
+    """One thing the Daily Overview email has reported or will report: a
+    new announcement, a newly graded item (or a grade whose score/feedback
+    changed), a needs-attention trigger, a Calendar change, or something
+    that needs the user. Identity is `(course_id, kind, external_id)`;
+    `content_hash` detects a changed grade/feedback so it resurfaces as an
+    update. `emailed_on` is `None` while pending -- set by
+    `digest-record-sent` only after the email actually went out, so a
+    failed send carries the entry into the next run instead of losing it.
+    `payload` holds the sourced fields the email renders (title, url,
+    score, verbatim comment...) -- see `digest.py`."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    course_id: str
+    kind: str
+    external_id: str
+    content_hash: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    first_seen: datetime | None = None
+    emailed_on: _date | None = None
+
+
+class DailyDigestRecord(BaseModel):
+    """Idempotency row for one course's Daily Overview email on one date --
+    unique per `(course_id, digest_date)`, so re-running the same morning
+    never double-sends. `skipped` marks a quiet day that sent nothing."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    course_id: str
+    digest_date: _date
+    gmail_message_id: str | None = None
+    skipped: bool = False
+    # The morning crawl as ingested (`digest.DigestCrawl` JSON) -- the
+    # per-day facts (grade, submission statuses, login result, advice)
+    # `digest-render` needs that aren't dedupe-tracked entries.
+    crawl: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
+
+    @property
+    def sent(self) -> bool:
+        return self.gmail_message_id is not None or self.skipped
 
 
 class Preference(BaseModel):

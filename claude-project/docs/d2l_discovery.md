@@ -785,6 +785,37 @@ that list would silently recreate the exact same gap. Instead:
    denied" on aleks.com the first time it was tried, but `get_page_text`
    worked fine on the same page with no extra permission needed -- try text
    extraction before concluding a new domain is inaccessible.
+7. **Deep-link into the platform; don't stop at its launch link.** This
+   rule was added in the 2026-10-05 redesign and supersedes the older "a
+   platform only exposes one generic launch URL, so link that" stance. The
+   user should never have to navigate a platform to find the lesson,
+   reading, or assignment. For every platform (ALEKS, McGraw Hill
+   Connect, Pearson, and any you haven't seen before), find the **most
+   specific stable URL** for each thing a banner, lecture, or deadline
+   points at:
+   - **Per-assignment LTI links in D2L Content.** Many courses add each
+     platform assignment as its own D2L content item, a deep-linked LTI
+     launch. That item's `viewContent` URL is stable and opens straight
+     into that assignment. Prefer it to the generic platform tile.
+   - **Per-lesson / per-topic / per-chapter URLs inside the platform:**
+     ALEKS objective or topic pages, Connect/SmartBook chapter
+     assignments, eBook chapter pages.
+   - **Stability test (required):** open the URL in a fresh tab. It
+     counts as stable only if it lands on that same specific page,
+     possibly after the normal SSO hop. A URL with a session token, a
+     one-time launch nonce, or a timestamp parameter is never stable. Use
+     the next level up instead.
+   - **When nothing deeper is stable,** link the most specific stable
+     entry point and name the exact target in the label. Examples:
+     `"ALEKS — Objective 4: Exponents (open from your ALEKS home)"`, or
+     `"Connect — Ch 23 SmartBook assignment"`.
+   - Save what you find where it belongs:
+     - a chapter's reading → `chapter-topic-add --reading-url`
+     - lessons and objectives → banner `--links` with `"kind":
+       "platform"`
+     - an assignment's own launch → that item's `reference_url`
+     - the platform's gradebook → `portal-link-set --kind
+       external_gradebook`, used by `/daily-overview`
 
 ## Enumerate the actual course nav -- don't guess from a fixed list
 
@@ -1209,63 +1240,90 @@ neither optional:
    title already uses. Then run `render <item_id>` (same command/flow as
    any other item) to get the exact Calendar payload.
 
-   **`--links` on a weekly banner, user-directed 2026-09-01** (supersedes
-   the 2026-08-30 `--reference-url`/`--resource-url` guidance for weekly
-   banners -- those two slots still work as a fallback, but `--links` is
-   the way now). A weekly overview aggregates a whole week, so it isn't
-   limited to two link slots: pass `--links` a JSON array of every real
-   resource a student actually needs to go to for that week's material,
-   and omit whatever discovery didn't find:
+   **The banner is the course shell for that week -- user-directed
+   redesign, 2026-10-05.** GPT teaching mode was retired. The student now
+   learns from the real curriculum, so the banner has to list every
+   reading for the week and link straight to each one. Layout (built by
+   `render`; never hand-typed):
 
    ```
-   academic-sync weekly-reading-add --course CODE \
-     --week-start ... --week-end ... --chapters "..." \
-     --links '[
-       {"label": "Lecture video - Ch 23", "url": "https://..."},
-       {"label": "Slides - Week of 8/24", "url": "https://..."},
-       {"label": "Textbook - Ch 23", "url": "https://..."}
-     ]'
+   BIO1112 - General Biology II
+   READING
+     Chapter 23 — Evolution of Populations
+     Big topics: 23.1 Genetic Variation · 23.2 Hardy-Weinberg · 23.3 Drift
+     → Textbook — Ch 23 reading            (chapter-specific link)
+     (next chapter ...)
+   SLIDES & RESOURCES                       (slides → video → handouts → platform → other)
+   PACING                                   (only when the source states it)
+   TOPIC DETAIL                             (every saved objective + vocabulary, never summarized)
+   CONTACT · DATES
    ```
 
-   What belongs in the list, in priority order:
-   - **that week's lecture video(s)** -- the actual recording(s) for the
-     week's sessions (BIO1112's "Lecture Materials" area, a Panopto/Zoom
-     cloud-recording link, etc.). Label with the chapter/week they cover.
-   - **that week's slide deck(s)** -- reuse the same slide-deck link
-     required find #4 already locates for the lecture event itself.
-   - **the textbook reading for the week's chapters** -- the specific
-     online chapter/section page when one exists; the textbook's general
-     access point when it doesn't (print-only, no stable per-chapter URL).
-     Put the chapter numbers in the label (`"Textbook - Ch 23"`).
+   **What discovery must capture for every chapter** (required find #6
+   plus this redesign). All of it is saved once with `chapter-topic-add`,
+   and every banner and lecture covering that chapter reuses it:
+
+   - `--section` (repeatable): the chapter's **real section headings**
+     (textbook "23.1 Genetic Variation", a module page's own
+     sub-headings, ALEKS objective names). These become the "Big topics"
+     line. They are structure taken from the source, never a summary you
+     wrote (invariant 22).
+   - `--reading-url` / `--reading-label`: the **chapter-specific reading**
+     -- the eBook's chapter page, a D2L content topic holding that
+     chapter's reading, the publisher's per-chapter assignment link, or
+     the OpenStax chapter.
+     - Search deeper than the course's "Textbook" launch link: open the
+       eBook or platform, navigate to the chapter, and confirm the URL
+       reopens that chapter in a fresh tab (see
+       `#external-courseware-platforms----detect-the-link-not-the-tool-name`
+       step 7).
+     - Only when no per-chapter URL exists after a real search, put the
+       platform's entry point on the banner as a textbook-kind
+       `weekly_links` entry. Its label names the chapter, e.g. `"Connect
+       eBook — open Ch 23"`.
+   - `--objective` / `--vocabulary`: unchanged. The full list renders
+     under TOPIC DETAIL, and the GPT quiz system builds its question pool
+     from it. A long list is truncated at the line level with a visible
+     note; the full capture always stays local.
+
+   **`--links` carries everything else for the week**, each with a
+   `kind`:
+
+   ```
+   --links '[
+     {"label": "Lecture video - Ch 23", "url": "https://...", "kind": "video"},
+     {"label": "Slides - Ch 23", "url": "https://...", "kind": "slides"},
+     {"label": "Hardy-Weinberg worksheet", "url": "https://...", "kind": "handout"},
+     {"label": "ALEKS — Objective 4: Exponents", "url": "https://...", "kind": "platform"},
+     {"label": "Textbook - Ch 24", "url": "https://...", "kind": "textbook", "chapter": "Chapter 24"}
+   ]'
+   ```
+
+   - `kind` is one of `textbook | slides | video | handout | platform |
+     other`.
+   - `textbook` links render under READING. One with a matching
+     `chapter` goes under that chapter when the chapter has no saved
+     `reading_url`.
+   - Every other kind renders under SLIDES & RESOURCES, grouped in that
+     order.
+   - Links saved before 2026-10-05 have no `kind`, so they are
+     classified from their label (`calendar_payload.link_kind`).
+   - Set links with `weekly-reading-add --links` or `render <id> --links
+     '[...]' --save`.
 
    **Never a syllabus link.** A syllabus states *that* a chapter is due,
-   not the reading itself; its URL stays internal (a `Source` row), and a
-   syllabus-labeled link is dropped at render time even if one slips in
-   (`sync/calendar_payload.py::_looks_like_syllabus`). Omitting a field
-   entirely is always better than a syllabus link.
+   not the reading itself. Its URL stays internal (a `Source` row), and a
+   syllabus link is dropped at render time even if one slips in
+   (`_looks_like_syllabus`). An absent resource is an honest gap; don't
+   pad it with a course-home link.
 
-   An absent resource is a real, honest gap -- don't pad the list with a
-   second reading link or a course-home link as a substitute. `--links` is
-   stored on `AcademicItem.weekly_links` (migration `_0012`) and can also
-   be set/updated later via `render <item_id> --links '[...]' --save`.
-
-   **THIS WEEK is auto-built from saved chapter topics, not hand-typed.**
-   `render` looks up each of the week's chapters (via `chapter_topics.
-   split_chapter_segments` on `--chapters`) against what's already been
-   saved with `chapter-topic-add` (required find #6 above, CLAUDE.md
-   invariant 26) -- a chapter with a saved topic gets its real vocabulary
-   and bulleted objectives; a chapter without one yet still shows its bare
-   name (thin but true, never blocked or fabricated). Nothing to pass at
-   render time for this -- just make sure `chapter-topic-add` was run for
-   the week's chapters first. `--details` on `render` is reserved for
-   PACING only now (any real, source-stated internal timing, e.g. "Ch. 12
-   by Wednesday, Ch. 13 by Friday" -- omit entirely when the source
-   doesn't differentiate timing within the week, never invent one) --
-   don't use it to try to override THIS WEEK's content, that's what
-   `chapter-topic-add` is for. `render` also appends a DATES section
-   automatically (the real `--week-start`/`--week-end` range) -- nothing
-   to pass for this either. Then create_event/update_event +
-   `record-sync`, same Step 5 flow as any other item.
+   `--details` on `render` is for PACING only: real, source-stated timing
+   within the week, never invented. `render` adds DATES automatically.
+   Then do create_event/update_event + `record-sync`, the same Step 5 flow
+   as any other item. Changing a `ChapterTopic` doesn't flag already-synced
+   banners for re-push by itself (chapter topics aren't item fields), so
+   after updating chapter data, re-render and push the banners that cover
+   it.
 
 This does **not** relax CLAUDE.md invariant 15's "don't miss anything" --
 every course, including an online/async one with no meetings at all, still
@@ -1506,16 +1564,19 @@ JSON array of that session's own resources, in priority order:
 - a **professor recording** for that session if the course has one
   (Panopto/Zoom/Kaltura -- many in-person courses have none, that's a
   real absence, not a gap to pad);
-- the **textbook reading** for that lecture's chapter(s) -- the specific
-  online chapter/section page, or the textbook's general access point if
-  there's no per-chapter URL, with the chapter number in the label.
+- the **textbook reading** for that lecture's chapter(s): reuse the same
+  URL saved on the chapter (`chapter-topic-add --reading-url`, which the
+  weekly banner also links), with `"kind": "textbook"`. Fall back to the
+  textbook's general access point, with the chapter number in the label,
+  only when no per-chapter URL exists after a real search.
 
 Omit any of these that genuinely doesn't exist. NEVER the syllabus, and
 never the textbook's front-matter/table-of-contents page as a stand-in
 for the actual chapter (a syllabus-labeled link is stripped at render
-time regardless). Deadline-type items (assignments/quizzes/exams) are
-unchanged -- they still use the two fixed `reference_url`/`resource_url`
-slots.
+time regardless). Deadline-type items (assignments/quizzes/exams) don't
+use this list. They have fixed slots: `reference_url`, `resource_url`, and
+(since 2026-10-05) `submission_url` for a separate turn-in location (see
+`#links`).
 
 ### Quiz/exam coverage -- unit summary vs. specific breakdown
 
@@ -1650,16 +1711,39 @@ real exception: external courseware (ALEKS-style) where the "go do the
 work" link *is* the submission mechanism -- `reference_url` alone is
 correct there and there's normally no separate `resource_url` to find.
 
+**`submission_url` / `submission_url_label` -- a separate turn-in location
+(added 2026-10-05).** Real example: an exam's own page said the work had to
+be submitted separately to a Dropbox folder. That folder was a real graded
+deliverable, but nothing on the calendar linked it. Rules:
+
+- **Open every exam's and quiz's own instructions page**, not just its
+  listing row. Any "submit your work", "upload your scratch work", or
+  "turn in your written solutions" language makes finding that dropbox a
+  **required find** (invariant 17). If you can't locate it, record it with
+  `unresolved-add`.
+- Set it on the exam: `render <exam_id> --submission-url "<dropbox url>"
+  [--submission-url-label "Submit Work"] --save`. It renders as its own
+  **Submit Work** link, alongside the exam's `reference_url`.
+- **Also give the submission its own deadline event.** Run the dropbox
+  folder's real text (name + due date) through `extract --source-type
+  d2l_dropbox`, so the date is sourced and the item gets its own
+  fingerprint. Then `render <new_id> --reference-url "<dropbox url>"
+  --reference-url-label "Submit Here" --save`. If the dropbox states no due
+  date, the companion item stays in the unresolved queue like any other
+  undated item (invariant 1).
+
 **`resource_url` / `resource_url_label` -- external material, almost
 always a textbook:**
 
 - Only ever populate this with a URL the source itself gave you (an
   explicit link in the syllabus/content page, or a platform confirmed to
   expose stable per-chapter/per-section URLs, e.g. some open-textbook
-  platforms). **Never construct or guess one** -- adaptive courseware and
-  most LTI-launched textbook tools (ALEKS, many publisher platforms) only
-  expose a single generic launch URL, not addressable per-chapter pages,
-  and a guessed URL is worse than no URL.
+  platforms). **Never construct or guess one**; a guessed URL is worse
+  than no URL. But don't assume a platform has *no* per-chapter address
+  until you've actually looked (per-assignment LTI items in D2L Content,
+  the eBook's chapter pages): see
+  `#external-courseware-platforms----detect-the-link-not-the-tool-name`
+  step 7.
 - If the URL is genuinely chapter/section-specific, say so in the label,
   e.g. `"Textbook (Ch. 6)"`. If it's only the textbook's general home/
   launch page, label it plainly (`"Textbook"`) -- **and make sure the

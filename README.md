@@ -1,49 +1,47 @@
 # Study Prompt System
 
-An adaptive tutor for ChatGPT. It reads your class curriculum straight from your Google Calendar, remembers your progress in one Google Drive spreadsheet, and decides what to teach or quiz you on next — across all your classes. It never makes up course content and never edits your calendar.
+An exam-prep quizzer for ChatGPT. You study from the real readings linked on your Google Calendar's weekly overviews. This system checks that it stuck: pick a class, and it gives you **10 exam-style questions** over everything covered so far, grades all 10 at once, explains only the ones you missed (each with a link back to the reading), and tracks your weak spots across sessions in one Google Drive spreadsheet. It never makes up course content and never edits your calendar.
 
 This repo has two halves:
 
-- **The study system** (`boot.md`, `engine/`, `modes/`, `ops/`) — runs in ChatGPT.
-- **`claude-project/`** — the Claude Code project that scans your classes from D2L into Google Calendar (the calendar this study system reads), plus related tools.
+- **The quiz system** (`boot.md`, `engine/`, `ops/`) runs in ChatGPT.
+- **`claude-project/`** is the Claude Code project that scans your classes from D2L into Google Calendar (the weekly overviews this quiz system reads), sends a daily per-class email of what changed, and includes related tools.
 
 ---
 
-## Start studying (ChatGPT)
+## Start a quiz (ChatGPT)
 
 **One-time setup**
 
 1. In ChatGPT **Settings → Plugins/Connectors**, connect **GitHub**, **Google Drive**, and **Google Calendar**.
-2. Use a normal chat — not a Custom GPT (Custom GPTs can't reach Drive and Calendar).
+2. Use a normal chat, not a Custom GPT (Custom GPTs can't reach Drive and Calendar).
 
-**Every session** — open a new chat and paste:
+**Every session**: open a new chat and paste:
 
 ```text
-You are an adaptive study system. Use the GitHub connector to open https://raw.githubusercontent.com/kadenw213-svg/study-prompt-system/main/boot.md, read it fully, and follow it exactly. Don't explain or summarize it — just start.
+You are an exam-prep quiz system. Use the GitHub connector to open https://raw.githubusercontent.com/kadenw213-svg/study-prompt-system/main/boot.md, read it fully, and follow it exactly. Don't explain or summarize it — just start.
 ```
 
 ## Using it
 
 | You do | It does |
 |---|---|
-| **Enter** or **A** | **Automatic** — balances all your classes: urgent deadlines first, then quick checks on older material you haven't touched in a while, then this week's work, spread fairly across classes. Switches classes on its own and tells you why. |
-| A class number | Studies just that class, starting where you left off. |
-| A **self-study course** (listed separately) | Goes straight into this week's lesson. There are no quizzes or deadlines; practice happens through the questions built into each lesson and chapter. Automatic never touches these; you pick them on purpose. |
-| Type `23`, `23.2`, `23-25`, `week 5` | Studies exactly that chapter, section, range, or week. |
-| Type `midterm`, `E1`, `Q2`, or "prepare me for the exam tomorrow" | Exam prep, based on what the exam actually covers. |
-| **Paste a photo of homework** | **Teach mode** — teaches the ideas behind the problems, lets you try, then checks your work. |
-| Say "check" or "just the answers" with the photo | **Check mode** — gives the answers so you can check yours. Doesn't count toward mastery. |
-| **M** | Save and go back to the menu. |
+| Pick a class number | Shows what's covered so far and when your next exam is, then gives you a set of 10 questions. |
+| Answer all 10 in one message: `1 B` · `2 A,C` · `3 4.20 mol` · `4 1-c 2-a` · `?` to skip | Grades all 10. Shows your score, then explains just the ones you missed and links the textbook section to reread. |
+| **Enter** | Next 10. Questions you missed come back in a different form until you get them right. |
+| "just chapter 3", "exam 2 stuff" | Narrows the next sets to those chapters. |
+| **W** | Your weak spots by chapter, with reading links, plus a quiz on only those. |
 | **K** | Switch class. |
-| **W** | Review your weak spots. |
-| **X** | Detailed progress for the class. |
-| **E** | "I don't know" — get the explanation. |
+| **X** | Done: shows a session summary. |
 
-**Things it does automatically**
+**How sets are built**
 
-- Checks your calendar for new assignments and new weeks at least once a day, without asking. If something urgent appears, it changes course on its own.
-- Saves every homework problem you show it (a short summary, not a photo) so its quizzes are at least as hard as your real homework. It also brings back problems that keep repeating when you prep for a midterm or final.
-- Suggests starting a fresh chat when one gets long. You'll resume exactly where you were.
+- About 4 questions from your weak spots: past misses, low confidence, and chapters flagged from your real grades.
+- About 3 from your next exam's coverage, or about 5 when the exam is within a week.
+- About 3 from the rest of the term so far.
+- Formats match real exams: multiple choice, select-all, matching, ordering, numeric with units and sig figs, multi-step, fill-in, true/false-with-fix, short answer, scenarios. Every set includes at least two unusual formats or edge cases, so nothing on the real exam is new to you.
+
+Self-study courses (built with `/custom-curriculum`) appear in their own section and work the same way.
 
 **Where your data lives:** a single Google Sheet in your Drive named `llmMemory__studyPrompt__calendarSynced__studyMemory`. Nothing personal is stored in this repo.
 
@@ -54,7 +52,15 @@ You are an adaptive study system. Use the GitHub connector to open https://raw.g
 `claude-project/` is a self-contained Claude Code project.
 
 1. Clone this repo and open a Claude Code session **inside `claude-project/`**.
-2. Say anything (e.g. "set up"). Claude reads `CLAUDE.md`, installs what it needs (`uv`, Python, dependencies), creates your local config — asking only for what it can't figure out — and then lists the available skills.
-3. Your personal details (name, school D2L address, calendar IDs) go only in `config/personal.local.md`, which is never uploaded.
+2. Say anything (e.g. "set up"). Claude reads `CLAUDE.md`, installs what it needs (`uv`, Python, dependencies), and creates your local config, asking only for what it can't figure out. Then it lists the available skills.
+3. Your personal details (name, school D2L address, SSO host, email, calendar IDs) go only in `config/personal.local.md`, which is never uploaded.
 
-Main skills: `/academic-import` (first-time scan of a class into Google Calendar), `/academic-sync` (weekly updates + grade check), `/academic-prefs`, `/custom-curriculum` (builds a self-study course with a full chapter-by-chapter outline on your calendar), `/audio-lectures`, `/shift-sync`.
+Main skills:
+
+- `/academic-import` scans a class into Google Calendar for the first time. Its weekly overviews list every reading with direct chapter links.
+- `/academic-sync` re-scans a class and builds upcoming weeks.
+- `/daily-overview` runs at 5am each day and emails one update per class: new announcements, new grades with feedback, missed deadlines, and what's due today.
+- `/academic-prefs`
+- `/custom-curriculum` builds a self-study course from real open course material online.
+- `/audio-lectures`
+- `/shift-sync`

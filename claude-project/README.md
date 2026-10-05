@@ -13,17 +13,21 @@ the import skill) actually looks at the D2L lab schedule.
 ## How this is built
 
 This project deliberately does **not** reimplement Google OAuth or browser
-automation. It runs as two Claude Code skills:
+automation. It runs as a family of Claude Code skills (see CLAUDE.md's
+"Where the skills fit" for all of them, including `academic-sync`,
+`daily-overview`, `custom-curriculum`, `audio-lectures`, `shift-sync`).
+The two core ones:
 
 - **`academic-import`** -- drives D2L discovery live, through your own logged-in
   Chrome session (via Claude Code's browser control) and writes to your Google
   Calendar through Claude Code's already-authorized Google Calendar connector.
   No separate OAuth client, no stored password, no persisted browser session
-  file.
+  file. Each course's weekly overview lists every reading with a direct
+  chapter link, plus slides and resources.
 - **`academic-prefs`** -- inspects/edits your saved preferences (target
   calendar, colors, default due time, room mappings, precedence rules, etc).
 
-Underneath both skills is a real, independently testable Python package
+Underneath the skills is a real, independently testable Python package
 (`src/academic_sync/`) that does all the deterministic work: HTML/PDF parsing,
 date extraction, completeness analysis, deduplication/reconciliation, and
 local persistence (SQLite). Claude does the parts that require live web

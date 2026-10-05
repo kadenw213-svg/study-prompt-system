@@ -5,7 +5,8 @@ from datetime import date, datetime, time
 
 import pytest
 
-from academic_sync.models.domain import AcademicItem, Course, Source, WeeklyLink
+from academic_sync.chapter_topics import canonicalize_chapter_label
+from academic_sync.models.domain import AcademicItem, ChapterTopic, Course, Source, WeeklyLink
 from academic_sync.models.enums import CourseStatus, DiagnosticStatus, ItemStatus, ItemType, SourceType
 from academic_sync.reconciliation.fingerprint import compute_calendar_fingerprint
 from academic_sync.sync.calendar_payload import (
@@ -26,6 +27,7 @@ from academic_sync.sync.calendar_payload import (
     embed_fingerprint_tag,
     extract_fingerprint_tag,
     format_details_blocks,
+    link_kind,
     platform_label_for_source,
 )
 
@@ -730,7 +732,17 @@ def test_weekly_reading_without_date_range_end_never_ready_to_sync():
     assert item.is_ready_to_sync() is False
 
 
-def test_weekly_reading_description_has_chapter_blocks_links_no_pacing_when_absent():
+def _topic(label: str, **kwargs) -> ChapterTopic:
+    defaults = dict(id=uuid.uuid4().hex, course_id="c1", chapter_label=label)
+    defaults.update(kwargs)
+    return ChapterTopic(**defaults)
+
+
+def _topics(*topics: ChapterTopic) -> dict[str, ChapterTopic]:
+    return {canonicalize_chapter_label(t.chapter_label): t for t in topics}
+
+
+def test_weekly_reading_lists_every_chapter_under_reading_with_legacy_links_as_resources():
     item = _item(
         item_type=ItemType.WEEKLY_READING,
         title="Chapter 12: Cellular Respiration; Chapter 13: Photosynthesis",
@@ -740,32 +752,126 @@ def test_weekly_reading_description_has_chapter_blocks_links_no_pacing_when_abse
     )
     description = build_weekly_reading_description(item, COURSE)
     assert (
-        "<b>THIS WEEK</b><br>Chapter 12:<br>Cellular Respiration;<br><br>"
-        "Chapter 13:<br>Photosynthesis;" in description
+        "<b>READING</b><br><b>Chapter 12 — Cellular Respiration</b><br><br>"
+        "<b>Chapter 13 — Photosynthesis</b>" in description
     )
+    assert "THIS WEEK" not in description
     assert "PACING" not in description
-    assert '<a href="https://d2l.example/content/module9">D2L (Module 9)</a>' in description
-    assert '<a href="https://textbook.example/ch12">Textbook</a>' in description
+    assert "TOPIC DETAIL" not in description  # nothing captured -> no empty section
+    resources = description.split("<b>SLIDES &amp; RESOURCES</b><br>")[1].split("<br><br>")[0]
+    assert resources == (
+        '<a href="https://d2l.example/content/module9">D2L (Module 9)</a><br>'
+        '<a href="https://textbook.example/ch12">Textbook</a>'
+    )
     assert "<b>CONTACT</b><br>Jane Doe" in description
 
 
-def test_weekly_links_render_as_labeled_links_in_order():
+def test_reading_section_shows_big_topics_then_chapter_reading_link():
     item = _item(
         item_type=ItemType.WEEKLY_READING, title="Chapter 23: Evolution of Populations",
         date=date(2026, 8, 24), date_range_end=date(2026, 8, 30),
+    )
+    topics = _topics(_topic(
+        "Chapter 23",
+        sections=["23.1 Genetic Variation", "23.2 Hardy-Weinberg", "23.3 Drift and Gene Flow"],
+        reading_url="https://ebook.example/ch23", reading_label="Textbook — Ch 23 reading",
+    ))
+    description = build_weekly_reading_description(item, COURSE, chapter_topics=topics)
+    reading = description.split("<b>READING</b><br>")[1].split("<br><br><b>")[0]
+    assert reading == (
+        "<b>Chapter 23 — Evolution of Populations</b><br>"
+        "Big topics: 23.1 Genetic Variation · 23.2 Hardy-Weinberg · 23.3 Drift and Gene Flow<br>"
+        '→ <a href="https://ebook.example/ch23">Textbook — Ch 23 reading</a>'
+    )
+
+
+def test_reading_section_is_first_content_section_and_topic_detail_near_bottom():
+    item = _item(
+        item_type=ItemType.WEEKLY_READING, title="Chapter 23: Evolution of Populations",
+        date=date(2026, 8, 24), date_range_end=date(2026, 8, 30),
+        weekly_links=[WeeklyLink(label="Slides - Ch 23", url="https://slides.example/23")],
+    )
+    topics = _topics(_topic("Chapter 23", objectives=["Explain drift"], vocabulary="allele"))
+    description = build_weekly_reading_description(
+        item, COURSE, chapter_topics=topics, pacing="Ch. 23 by Wednesday",
+    )
+    order = [
+        description.index("<b>READING</b>"),
+        description.index("<b>SLIDES &amp; RESOURCES</b>"),
+        description.index("<b>PACING</b>"),
+        description.index("<b>TOPIC DETAIL</b>"),
+        description.index("<b>CONTACT</b>"),
+        description.index("<b>DATES</b>"),
+    ]
+    assert order == sorted(order)
+    assert (
+        "<b>TOPIC DETAIL</b><br><b>Chapter 23 — Evolution of Populations:</b><br>"
+        "• Vocabulary: allele<br>• Explain drift" in description
+    )
+
+
+def test_topic_detail_keeps_every_objective_and_uses_saved_title_for_bare_label():
+    # CHE1011-style bare "Chapter 1" banner title -- the saved topic's own
+    # title fills in the header; every objective is kept, never summarized.
+    item = _item(
+        item_type=ItemType.WEEKLY_READING, title="Chapter 1",
+        date=date(2026, 8, 17), date_range_end=date(2026, 8, 23),
+    )
+    objectives = [f"Objective {i}" for i in range(25)]
+    topics = _topics(_topic("Chapter 1", title="Matter and Measurement", objectives=objectives))
+    description = build_weekly_reading_description(item, COURSE, chapter_topics=topics)
+    assert "<b>Chapter 1 — Matter and Measurement</b>" in description
+    for objective in objectives:
+        assert f"• {objective}" in description
+
+
+def test_textbook_links_go_under_their_chapter_and_other_kinds_group_in_resources():
+    item = _item(
+        item_type=ItemType.WEEKLY_READING,
+        title="Chapter 23: Evolution of Populations; Chapter 24: Origin of Species",
+        date=date(2026, 8, 24), date_range_end=date(2026, 8, 30),
         weekly_links=[
-            WeeklyLink(label="Lecture video - Ch 23", url="https://video.example/w2"),
-            WeeklyLink(label="Slides - Week of 8/24", url="https://slides.example/w2"),
-            WeeklyLink(label="Textbook - Ch 23", url="https://textbook.example/ch23"),
+            WeeklyLink(label="Textbook - Ch 24", url="https://tb.example/24", kind="textbook",
+                       chapter="Chapter 24"),
+            WeeklyLink(label="Hardy-Weinberg worksheet", url="https://d2l.example/hw", kind="handout"),
+            WeeklyLink(label="Lecture video - Ch 23", url="https://video.example/23"),
+            WeeklyLink(label="Slides - Ch 23", url="https://slides.example/23"),
+            WeeklyLink(label="McGraw Hill Connect (eBook)", url="https://connect.example",
+                       kind="textbook"),
         ],
     )
     description = build_weekly_reading_description(item, COURSE)
-    links_block = description.split("<b>LINKS</b><br>")[1].split("<br><br>")[0]
-    assert links_block == (
-        '<a href="https://video.example/w2">Lecture video - Ch 23</a><br>'
-        '<a href="https://slides.example/w2">Slides - Week of 8/24</a><br>'
-        '<a href="https://textbook.example/ch23">Textbook - Ch 23</a>'
+    reading = description.split("<b>READING</b><br>")[1].split("<br><br><b>SLIDES")[0]
+    assert reading == (
+        "<b>Chapter 23 — Evolution of Populations</b><br><br>"
+        "<b>Chapter 24 — Origin of Species</b><br>"
+        '→ <a href="https://tb.example/24">Textbook - Ch 24</a><br><br>'
+        '→ <a href="https://connect.example">McGraw Hill Connect (eBook)</a>'
     )
+    resources = description.split("<b>SLIDES &amp; RESOURCES</b><br>")[1].split("<br><br>")[0]
+    assert resources == (
+        '<a href="https://slides.example/23">Slides - Ch 23</a><br>'
+        '<a href="https://video.example/23">Lecture video - Ch 23</a><br>'
+        '<a href="https://d2l.example/hw">Hardy-Weinberg worksheet</a>'
+    )
+
+
+def test_unkinded_legacy_textbook_link_is_classified_into_reading():
+    item = _item(
+        item_type=ItemType.WEEKLY_READING, title="Chapter 23: Evolution of Populations",
+        date=date(2026, 8, 24), date_range_end=date(2026, 8, 30),
+        weekly_links=[WeeklyLink(label="Textbook - Ch 23", url="https://textbook.example/ch23")],
+    )
+    description = build_weekly_reading_description(item, COURSE)
+    assert '→ <a href="https://textbook.example/ch23">Textbook - Ch 23</a>' in description
+    assert "SLIDES &amp; RESOURCES" not in description
+
+
+def test_link_kind_explicit_wins_over_label():
+    assert link_kind(WeeklyLink(label="Slides", url="u", kind="other")) == "other"
+    assert link_kind(WeeklyLink(label="Power Point Slides", url="u")) == "slides"
+    assert link_kind(WeeklyLink(label="Guided Reading Ch 3", url="u")) == "textbook"
+    assert link_kind(WeeklyLink(label="ALEKS", url="u")) == "other"
 
 
 def test_weekly_links_take_precedence_over_reference_and_resource_url():
@@ -805,15 +911,11 @@ def test_weekly_banner_syllabus_reference_url_dropped_on_render():
         reference_url="https://d2l.example/content/syllabus", reference_url_label="Syllabus",
     )
     description = build_weekly_reading_description(item, COURSE)
-    assert "<b>LINKS</b>" not in description
+    assert "SLIDES &amp; RESOURCES" not in description
     assert "syllabus" not in description.lower()
 
 
-def test_weekly_reading_description_dates_section_is_last_after_contact_and_links():
-    # User-directed, 2026-08-25: the date range moved out of the title
-    # into a DATES section at the very bottom of the description --
-    # after CONTACT/LINKS (the fingerprint tag is appended outside this
-    # function, by embed_fingerprint_tag, so DATES ends up right above it).
+def test_weekly_reading_description_dates_section_is_last():
     item = _item(
         item_type=ItemType.WEEKLY_READING, title="Chapter 5: Cell Division",
         date=date(2026, 9, 7), date_range_end=date(2026, 9, 13),
@@ -821,10 +923,7 @@ def test_weekly_reading_description_dates_section_is_last_after_contact_and_link
     )
     description = build_weekly_reading_description(item, COURSE)
     assert description.endswith("<b>DATES</b><br>Sep 7 - 13")
-    contact_idx = description.index("<b>CONTACT</b>")
-    links_idx = description.index("<b>LINKS</b>")
-    dates_idx = description.index("<b>DATES</b>")
-    assert contact_idx < links_idx < dates_idx
+    assert description.index("<b>CONTACT</b>") < description.index("<b>DATES</b>")
 
 
 def test_weekly_reading_description_dates_section_omitted_without_date_range_end():
@@ -845,22 +944,6 @@ def test_weekly_reading_description_includes_pacing_only_when_given():
         item, COURSE, pacing="Ch. 2 by Wednesday, quiz covers through Ch. 2 by Friday",
     )
     assert "<b>PACING</b><br>Ch. 2 by Wednesday, quiz covers through Ch. 2 by Friday" in description
-
-
-def test_weekly_reading_description_this_week_override_replaces_bare_topic_line():
-    item = _item(
-        item_type=ItemType.WEEKLY_READING,
-        title="Chapter 23: Evolution of Populations",
-        date=date(2026, 8, 24), date_range_end=date(2026, 8, 30),
-    )
-    description = build_weekly_reading_description(
-        item, COURSE, this_week="<b>Chapter 23 — Evolution of Populations:</b><br>• Real objective",
-    )
-    assert (
-        "<b>THIS WEEK</b><br><b>Chapter 23 — Evolution of Populations:</b><br>• Real objective"
-        in description
-    )
-    assert "Chapter 23:<br>Evolution of Populations;" not in description
 
 
 def test_format_details_blocks_text_block_with_label():
@@ -903,22 +986,23 @@ def test_weekly_reading_description_stays_under_budget_with_exhaustive_topic_lis
     # An exhaustively-captured chapter (CLAUDE.md invariant 26) can
     # legitimately produce hundreds of real objective lines -- confirm the
     # rendered description stays under Google Calendar's real ~8192-char
-    # limit and that the small, always-wanted sections (CONTACT/LINKS/
-    # DATES) survive intact rather than being the thing truncated.
-    huge_this_week = format_details_blocks([
-        DetailsBlock(
-            label="Chapter 23 — Evolution of Populations",
-            items=[f"Real objective number {i} about population genetics" for i in range(300)],
-        )
-    ])
+    # limit, that only TOPIC DETAIL is truncated (with a visible note), and
+    # that READING/RESOURCES/CONTACT/DATES survive intact.
     item = _item(
         item_type=ItemType.WEEKLY_READING, title="Chapter 23: Evolution of Populations",
         date=date(2026, 9, 7), date_range_end=date(2026, 9, 13),
         reference_url="https://d2l.example/content/module9", reference_url_label="D2L (Module 9)",
     )
-    description = build_weekly_reading_description(item, COURSE, this_week=huge_this_week)
-    assert len(description) < len(huge_this_week)
+    topics = _topics(_topic(
+        "Chapter 23",
+        sections=["23.1 Genetic Variation", "23.2 Hardy-Weinberg"],
+        reading_url="https://ebook.example/ch23", reading_label="Textbook — Ch 23",
+        objectives=[f"Real objective number {i} about population genetics" for i in range(300)],
+    ))
+    description = build_weekly_reading_description(item, COURSE, chapter_topics=topics)
     assert len(description) <= DESCRIPTION_CHAR_BUDGET
+    assert "Big topics: 23.1 Genetic Variation · 23.2 Hardy-Weinberg" in description
+    assert '<a href="https://ebook.example/ch23">Textbook — Ch 23</a>' in description
     assert "<b>CONTACT</b><br>Jane Doe" in description
     assert '<a href="https://d2l.example/content/module9">D2L (Module 9)</a>' in description
     assert description.endswith("<b>DATES</b><br>Sep 7 - 13")
@@ -1189,3 +1273,21 @@ def test_diagnostic_payload_is_single_all_day_monday_event_titled_per_course():
     assert payload["guestsCanInviteOthers"] is False
     assert compute_calendar_fingerprint("diagnostic-fp-abc123") in payload["description"]
     assert payload["extendedProperties"]["private"]["academic_sync_diagnostic_record_id"] == "rec-1"
+
+
+def test_deadline_submission_url_renders_as_separate_submit_work_link():
+    item = _item(
+        item_type=ItemType.EXAM, title="Exam 3", date=date(2026, 10, 20), due_time=time(23, 59),
+        reference_url="https://d2l.example/quiz/3", reference_url_label="Exam",
+        submission_url="https://d2l.example/dropbox/77",
+        resource_url="https://tb.example/ch5", resource_url_label="Textbook (Ch. 5)",
+    )
+    description = build_deadline_description(
+        item, COURSE, nesting=None, details=None, required_resources=None,
+    )
+    links = description.split("<b>LINKS</b><br>")[1]
+    assert links == (
+        '<a href="https://d2l.example/quiz/3">Exam</a><br>'
+        '<a href="https://d2l.example/dropbox/77">Submit Work</a><br>'
+        '<a href="https://tb.example/ch5">Textbook (Ch. 5)</a>'
+    )

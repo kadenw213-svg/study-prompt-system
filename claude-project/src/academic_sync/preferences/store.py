@@ -70,6 +70,11 @@ KNOWN_PREFERENCES: dict[str, PreferenceSpec] = {
         "d2l_base_url", PreferenceCategory.D2L_ALIAS, None,
         "Institution D2L/Brightspace base URL, used to pre-fill navigation.",
     ),
+    "digest_email_to": PreferenceSpec(
+        "digest_email_to", PreferenceCategory.OTHER, None,
+        "Address the Daily Overview emails go to (sent from the connected Gmail "
+        "account). No email is sent while unset.",
+    ),
     "diagnostic_color_red": PreferenceSpec(
         "diagnostic_color_red", PreferenceCategory.CALENDAR, "11",
         "Google Calendar colorId for a RED 'Previous Week Diagnostic' banner "

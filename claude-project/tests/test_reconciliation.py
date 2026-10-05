@@ -263,3 +263,31 @@ def test_conflicted_item_is_conflict_action():
     )
     entry = decide_action(incoming, existing=None, sync_record=None)
     assert entry.action == SyncAction.CONFLICT
+
+
+def test_snapshot_from_before_a_field_was_compared_is_still_unchanged(session, make_course):
+    # A snapshot recorded before submission_url (2026-10-05) joined
+    # _COMPARED_FIELDS lacks that key entirely. It must read as None, not
+    # as drift -- otherwise every previously-synced item would flip to
+    # UPDATE the moment a new compared field ships.
+    course = make_course()
+    fp = compute_fingerprint(course.id, "quiz", "Quiz 6")
+    original = _quiz_item(course.id, date(2026, 10, 5), fp)
+    row = repository.upsert_academic_item(session, original)
+    old_snapshot = snapshot_compared_fields(original)
+    old_snapshot.pop("submission_url")
+    old_snapshot.pop("submission_url_label")
+    repository.upsert_sync_record(
+        session, academic_item_id=row.id, google_calendar_id="primary",
+        google_event_id="evt_6", status=SyncAction.UNCHANGED, mark_synced=True,
+        last_synced_fields=old_snapshot,
+    )
+    plan = compute_plan(session, course.id, repository.list_items_for_course(session, course.id))
+    assert plan.entries[0].action == SyncAction.UNCHANGED
+
+    enriched = repository.get_academic_item(session, row.id)
+    enriched.submission_url = "https://d2l.example/dropbox/1"
+    repository.upsert_academic_item(session, enriched)
+    plan = compute_plan(session, course.id, repository.list_items_for_course(session, course.id))
+    assert plan.entries[0].action == SyncAction.UPDATE
+    assert "submission_url" in plan.entries[0].reason

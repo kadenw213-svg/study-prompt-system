@@ -20,7 +20,10 @@ from academic_sync.db.orm import (
     AuditLogRow,
     ChapterTopicRow,
     CourseGradeSnapshotRow,
+    CoursePortalLinkRow,
     CourseRow,
+    DailyDigestRecordRow,
+    DigestEntryRow,
     GradeSnapshotRow,
     LocationRow,
     PreferenceRow,
@@ -95,7 +98,18 @@ def resolve_course_id(session: Session, course_id_or_prefix: str) -> str | None:
     matches = session.execute(
         select(CourseRow.id).where(CourseRow.id.like(f"{course_id_or_prefix}%"))
     ).scalars().all()
-    return matches[0] if len(matches) == 1 else None
+    if len(matches) == 1:
+        return matches[0]
+    if matches:
+        return None
+    # Also accept a course code ("MAT1340", "mat 1340") when exactly one
+    # course has it -- the daily run addresses courses by code.
+    wanted = course_id_or_prefix.replace(" ", "").lower()
+    by_code = [
+        row.id for row in session.execute(select(CourseRow)).scalars()
+        if row.course_code.replace(" ", "").lower() == wanted
+    ]
+    return by_code[0] if len(by_code) == 1 else None
 
 
 def list_courses(session: Session, term: str | None = None) -> list[domain.Course]:
@@ -382,7 +396,8 @@ def upsert_academic_item(
     # simply doesn't carry that information.
     for field in (
         "module_label", "reference_url", "reference_url_label",
-        "resource_url", "resource_url_label", "points", "link_available_date",
+        "resource_url", "resource_url_label", "submission_url", "submission_url_label",
+        "points", "link_available_date",
         "date_range_end", "date_inference_rule",
     ):
         incoming_value = getattr(item, field)
@@ -611,6 +626,15 @@ def upsert_chapter_topic(session: Session, topic: domain.ChapterTopic) -> Chapte
     row.vocabulary = topic.vocabulary
     row.objectives_json = topic.objectives
     row.is_exhaustive = topic.is_exhaustive
+    # Section headings / reading link are often captured in a separate pass
+    # from objectives -- an incoming empty value never blanks a saved one
+    # (same enrichment-preservation rule as upsert_academic_item).
+    if topic.sections or not row.sections_json:
+        row.sections_json = topic.sections
+    if topic.reading_url or not row.reading_url:
+        row.reading_url = topic.reading_url
+    if topic.reading_label or not row.reading_label:
+        row.reading_label = topic.reading_label
     row.source_ids_json = topic.source_ids
     row.source_wording = topic.source_wording
     row.last_seen = now
@@ -628,6 +652,7 @@ def list_chapter_topics_for_course(session: Session, course_id: str) -> list[dom
 def _chapter_topic_row_to_domain(row: ChapterTopicRow) -> domain.ChapterTopic:
     data = domain.ChapterTopic.model_validate(row).model_dump()
     data["objectives"] = row.objectives_json or []
+    data["sections"] = row.sections_json or []
     data["source_ids"] = row.source_ids_json or []
     return domain.ChapterTopic.model_validate(data)
 
@@ -941,3 +966,172 @@ def list_audit_log(session: Session, limit: int = 100) -> list[domain.AuditLogEn
         data["details"] = r.details_json or {}
         out.append(domain.AuditLogEntry.model_validate(data))
     return out
+
+
+def get_course_grade_snapshot_on_or_before(
+    session: Session, course_id: str, on_or_before: date
+) -> domain.CourseGradeSnapshot | None:
+    """Most recent CourseGradeSnapshot dated on or before `on_or_before` --
+    the Daily Overview's "since last week" trend basis. Daily runs store one
+    snapshot per capture date (the `week_start` column holds the capture
+    date for those rows)."""
+    row = session.execute(
+        select(CourseGradeSnapshotRow)
+        .where(
+            CourseGradeSnapshotRow.course_id == course_id,
+            CourseGradeSnapshotRow.week_start <= on_or_before,
+        )
+        .order_by(CourseGradeSnapshotRow.week_start.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+    return domain.CourseGradeSnapshot.model_validate(row) if row else None
+
+
+# --------------------------------------------------------------------------
+# Daily Overview: portal links, digest entries, daily records
+# --------------------------------------------------------------------------
+
+def upsert_portal_link(session: Session, link: domain.CoursePortalLink) -> CoursePortalLinkRow:
+    """Insert or update-in-place by (course_id, kind, label)."""
+    row = session.execute(
+        select(CoursePortalLinkRow).where(
+            CoursePortalLinkRow.course_id == link.course_id,
+            CoursePortalLinkRow.kind == link.kind,
+            CoursePortalLinkRow.label == link.label,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        row = CoursePortalLinkRow(
+            id=link.id, course_id=link.course_id, kind=link.kind, label=link.label
+        )
+        session.add(row)
+    row.url = link.url
+    row.updated_at = datetime.now(UTC)
+    session.flush()
+    return row
+
+
+def list_portal_links(session: Session, course_id: str) -> list[domain.CoursePortalLink]:
+    rows = session.execute(
+        select(CoursePortalLinkRow)
+        .where(CoursePortalLinkRow.course_id == course_id)
+        .order_by(CoursePortalLinkRow.kind, CoursePortalLinkRow.label)
+    ).scalars().all()
+    return [domain.CoursePortalLink.model_validate(r) for r in rows]
+
+
+def _digest_row_to_domain(row: DigestEntryRow) -> domain.DigestEntry:
+    data = domain.DigestEntry.model_validate(row).model_dump()
+    data["payload"] = row.payload_json or {}
+    return domain.DigestEntry.model_validate(data)
+
+
+def count_digest_entries(session: Session, course_id: str) -> int:
+    return len(session.execute(
+        select(DigestEntryRow.id).where(DigestEntryRow.course_id == course_id)
+    ).all())
+
+
+def record_digest_entry(
+    session: Session,
+    *,
+    course_id: str,
+    kind: str,
+    external_id: str,
+    content_hash: str,
+    payload: dict[str, object],
+    already_reported_on: date | None = None,
+) -> str:
+    """Record one observed announcement/grade/trigger. Returns "new",
+    "updated" (same identity, different content -- e.g. a regraded score
+    or new instructor feedback, which resurfaces it as pending), or
+    "seen" (identical to what's stored; nothing changes).
+    `already_reported_on` stores a brand-new entry as already emailed --
+    used for the first-run baseline so years of old announcements don't
+    flood the first email."""
+    row = session.execute(
+        select(DigestEntryRow).where(
+            DigestEntryRow.course_id == course_id,
+            DigestEntryRow.kind == kind,
+            DigestEntryRow.external_id == external_id,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        session.add(DigestEntryRow(
+            id=uuid.uuid4().hex, course_id=course_id, kind=kind, external_id=external_id,
+            content_hash=content_hash, payload_json=dict(payload),
+            emailed_on=already_reported_on,
+        ))
+        session.flush()
+        return "new"
+    if row.content_hash == content_hash:
+        return "seen"
+    row.content_hash = content_hash
+    row.payload_json = {**payload, "is_update": True}
+    row.emailed_on = None
+    session.flush()
+    return "updated"
+
+
+def list_pending_digest_entries(session: Session, course_id: str) -> list[domain.DigestEntry]:
+    rows = session.execute(
+        select(DigestEntryRow)
+        .where(DigestEntryRow.course_id == course_id, DigestEntryRow.emailed_on.is_(None))
+        .order_by(DigestEntryRow.first_seen)
+    ).scalars().all()
+    return [_digest_row_to_domain(r) for r in rows]
+
+
+def mark_digest_entries_emailed(session: Session, course_id: str, on: date) -> int:
+    result = session.execute(
+        update(DigestEntryRow)
+        .where(DigestEntryRow.course_id == course_id, DigestEntryRow.emailed_on.is_(None))
+        .values(emailed_on=on)
+    )
+    session.flush()
+    return int(getattr(result, "rowcount", 0) or 0)
+
+
+def get_daily_digest_record(
+    session: Session, course_id: str, digest_date: date
+) -> domain.DailyDigestRecord | None:
+    row = session.execute(
+        select(DailyDigestRecordRow).where(
+            DailyDigestRecordRow.course_id == course_id,
+            DailyDigestRecordRow.digest_date == digest_date,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    data = domain.DailyDigestRecord.model_validate(row).model_dump()
+    data["crawl"] = row.crawl_json or {}
+    return domain.DailyDigestRecord.model_validate(data)
+
+
+def upsert_daily_digest_record(
+    session: Session,
+    *,
+    course_id: str,
+    digest_date: date,
+    gmail_message_id: str | None = None,
+    skipped: bool = False,
+    crawl: dict[str, object] | None = None,
+) -> DailyDigestRecordRow:
+    row = session.execute(
+        select(DailyDigestRecordRow).where(
+            DailyDigestRecordRow.course_id == course_id,
+            DailyDigestRecordRow.digest_date == digest_date,
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        row = DailyDigestRecordRow(
+            id=uuid.uuid4().hex, course_id=course_id, digest_date=digest_date
+        )
+        session.add(row)
+    if crawl is not None:
+        row.crawl_json = dict(crawl)
+    if gmail_message_id is not None:
+        row.gmail_message_id = gmail_message_id
+    row.skipped = (skipped or bool(row.skipped)) and row.gmail_message_id is None
+    session.flush()
+    return row

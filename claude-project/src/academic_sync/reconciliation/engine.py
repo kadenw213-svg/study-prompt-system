@@ -39,6 +39,8 @@ _COMPARED_FIELDS = (
     "reference_url_label",
     "resource_url",
     "resource_url_label",
+    "submission_url",
+    "submission_url_label",
     "weekly_links",
     "link_available_date",
     "is_optional",
@@ -85,7 +87,15 @@ def snapshot_compared_fields(item: AcademicItem) -> dict[str, str | bool | None]
         if field == "weekly_links":
             # list[WeeklyLink] -> a stable, order-sensitive string so it
             # round-trips through JSON like every other value here.
-            value = ";".join(f"{link.label}|{link.url}" for link in value) or None
+            # kind/chapter are appended only when set, so links saved
+            # before those fields existed keep their original snapshot
+            # string and don't register as spurious drift.
+            value = ";".join(
+                f"{link.label}|{link.url}"
+                + (f"|{link.kind}" if link.kind else "")
+                + (f"|{link.chapter}" if link.chapter else "")
+                for link in value
+            ) or None
         elif hasattr(value, "isoformat"):
             value = value.isoformat()
         out[field] = value
@@ -161,12 +171,16 @@ def decide_action(
     # since both sides are the same stored data in that case.
     if sync_record.last_synced_fields is not None:
         current = snapshot_compared_fields(incoming)
-        if current == sync_record.last_synced_fields:
-            return PlanEntry(SyncAction.UNCHANGED, incoming, existing, "No change since last sync.")
+        # Compared field-by-field with .get(), not dict ==: a snapshot
+        # recorded before a field joined _COMPARED_FIELDS simply lacks that
+        # key, which must read as None (the new field's default), not as
+        # drift on every previously-synced item.
         changed = sorted(
             f for f in _COMPARED_FIELDS
             if current.get(f) != sync_record.last_synced_fields.get(f)
         )
+        if not changed:
+            return PlanEntry(SyncAction.UNCHANGED, incoming, existing, "No change since last sync.")
         return PlanEntry(
             SyncAction.UPDATE, incoming, existing,
             f"Fields changed since last sync: {', '.join(changed)}.",

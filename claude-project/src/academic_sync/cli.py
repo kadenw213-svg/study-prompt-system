@@ -12,20 +12,21 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
 import typer
+from pydantic import ValidationError
 from rich.console import Console
 from rich.markup import escape
 from rich.table import Table
 
 from academic_sync import completeness as completeness_mod
 from academic_sync import diagnostics as diagnostics_mod
+from academic_sync import digest as digest_mod
 from academic_sync import preferences as prefs_mod
 from academic_sync.chapter_topics import (
-    build_chapter_topic_blocks,
     canonicalize_chapter_label,
     split_chapter_segments,
 )
@@ -39,10 +40,13 @@ from academic_sync.extraction.pipeline import (
     extract_from_document,
 )
 from academic_sync.models.domain import (
+    PORTAL_LINK_KINDS,
+    WEEKLY_LINK_KINDS,
     AcademicItem,
     ChapterTopic,
     Course,
     CourseGradeSnapshot,
+    CoursePortalLink,
     GradeSnapshot,
     Source,
     UnresolvedReference,
@@ -83,6 +87,7 @@ from academic_sync.sync.calendar_payload import (
     format_details_blocks,
     platform_label_for_source,
 )
+from academic_sync.sync.email_payload import build_daily_overview_email
 from academic_sync.sync.planner import compute_plan
 
 app = typer.Typer(help="academic-sync: D2L -> normalized academic model -> Google Calendar.")
@@ -518,9 +523,13 @@ def unresolved_resolve_cmd(
 
 _WEEKLY_LINKS_HELP = (
     'JSON array of this item\'s real resource links, e.g. '
-    '\'[{"label": "Lecture Slides - Ch 23", "url": "https://..."}, '
-    '{"label": "Handout: Hardy-Weinberg Practice", "url": "https://..."}, '
-    '{"label": "Textbook - Ch 23", "url": "https://..."}]\'. Add whatever '
+    '\'[{"label": "Lecture Slides - Ch 23", "url": "https://...", "kind": "slides"}, '
+    '{"label": "Handout: Hardy-Weinberg Practice", "url": "https://...", "kind": "handout"}, '
+    '{"label": "Textbook - Ch 23", "url": "https://...", "kind": "textbook", '
+    '"chapter": "Chapter 23"}]\'. Optional "kind" is one of textbook/slides/video/'
+    "handout/platform/other (a banner renders textbook links under READING and "
+    "the rest under SLIDES & RESOURCES; unset kinds are classified from the "
+    'label); optional "chapter" ties a textbook link to its chapter. Add whatever '
     "discovery actually found -- for a weekly banner: that week's video / "
     "slide deck / textbook reading; for a lecture: that session's own "
     "slides / handout / in-class activity / professor recording / "
@@ -546,10 +555,18 @@ def _parse_weekly_links(raw: str | None) -> list[WeeklyLink]:
         console.print("[red]--links must be a JSON array of {label, url} objects.[/red]")
         raise typer.Exit(1)
     try:
-        return [WeeklyLink(**obj) for obj in parsed]
-    except TypeError as exc:
+        result = [WeeklyLink(**obj) for obj in parsed]
+    except (TypeError, ValidationError) as exc:
         console.print(f"[red]--links: {exc}[/red]")
         raise typer.Exit(1) from None
+    for link in result:
+        if link.kind is not None and link.kind not in WEEKLY_LINK_KINDS:
+            console.print(
+                f"[red]--links: kind {link.kind!r} must be one of "
+                f"{', '.join(WEEKLY_LINK_KINDS)}.[/red]"
+            )
+            raise typer.Exit(1)
+    return result
 
 
 @app.command("weekly-reading-add")
@@ -680,6 +697,25 @@ def chapter_topic_add_cmd(
                      "`completeness` flags unconfirmed rows separately from missing ones "
                      "(`partial_chapter_topic_count`) so they get revisited."),
     ] = False,
+    section: Annotated[
+        list[str] | None,
+        typer.Option("--section", help="Repeatable -- one real section heading per flag, "
+                     'e.g. --section "23.1 Genetic Variation" --section "23.2 Hardy-Weinberg". '
+                     "Rendered as the short 'Big topics' line under the chapter in a weekly "
+                     "banner's READING section. Must be the source's own structure (textbook "
+                     "section titles, module sub-headings) -- never a generated summary."),
+    ] = None,
+    reading_url: Annotated[
+        str | None,
+        typer.Option("--reading-url", help="The chapter-specific reading link (eBook chapter "
+                     "page, OpenStax chapter, D2L content topic) -- opened and confirmed "
+                     "stable during discovery, never constructed. Every banner covering this "
+                     "chapter links it under READING."),
+    ] = None,
+    reading_label: Annotated[
+        str | None,
+        typer.Option("--reading-label", help='e.g. "Textbook — Ch 23 reading".'),
+    ] = None,
 ) -> None:
     """Save (or refresh) a course's real chapter/unit topic breakdown --
     the durable source of truth `render` auto-pulls from for a weekly
@@ -700,6 +736,9 @@ def chapter_topic_add_cmd(
             vocabulary=vocabulary,
             objectives=objective or [],
             is_exhaustive=exhaustive,
+            sections=section or [],
+            reading_url=reading_url,
+            reading_label=reading_label,
         )
         row = repository.upsert_chapter_topic(session, topic)
         exhaustive_note = "" if exhaustive else " [yellow](not yet confirmed exhaustive)[/yellow]"
@@ -874,6 +913,14 @@ def render_cmd(
     reference_url_label: Annotated[str | None, typer.Option("--reference-url-label")] = None,
     resource_url: Annotated[str | None, typer.Option("--resource-url")] = None,
     resource_url_label: Annotated[str | None, typer.Option("--resource-url-label")] = None,
+    submission_url: Annotated[
+        str | None,
+        typer.Option("--submission-url", help="A separate turn-in location distinct from the "
+                     "item's own page -- e.g. the Dropbox an exam says to submit your work to. "
+                     "Renders as its own 'Submit Work' link. Only a URL discovery actually "
+                     "opened."),
+    ] = None,
+    submission_url_label: Annotated[str | None, typer.Option("--submission-url-label")] = None,
     links: Annotated[str | None, typer.Option("--links", help=_WEEKLY_LINKS_HELP)] = None,
     link_available_date: Annotated[
         str | None,
@@ -1004,6 +1051,10 @@ def render_cmd(
             item.resource_url = resource_url
         if resource_url_label is not None:
             item.resource_url_label = resource_url_label
+        if submission_url is not None:
+            item.submission_url = submission_url
+        if submission_url_label is not None:
+            item.submission_url_label = submission_url_label
         if links is not None:
             if item.item_type == ItemType.WEEKLY_READING or item.item_type.is_routine_meeting:
                 item.weekly_links = _parse_weekly_links(links)
@@ -1105,12 +1156,8 @@ def render_cmd(
                 topic = repository.get_chapter_topic(session, item.course_id, label)
                 if topic is not None:
                     topics_by_label[canonicalize_chapter_label(label)] = topic
-            this_week = None
-            if topics_by_label:
-                block_dicts = build_chapter_topic_blocks(segments, topics_by_label)
-                this_week = format_details_blocks([DetailsBlock(**b) for b in block_dicts])
             description = build_weekly_reading_description(
-                item, course, this_week=this_week, pacing=details,
+                item, course, chapter_topics=topics_by_label, pacing=details,
             )
         elif is_physical_meeting:
             description = build_meeting_description(
@@ -1420,6 +1467,217 @@ def diagnostic_record_sync_cmd(
         )
     console.print("[green]Recorded.[/green]")
 
+
+# --------------------------------------------------------------------------
+# Daily Overview email (CLAUDE.md invariant 38)
+# --------------------------------------------------------------------------
+
+
+@app.command("portal-link-set")
+def portal_link_set_cmd(
+    course: Annotated[str, typer.Option("--course")],
+    kind: Annotated[str, typer.Option("--kind", help=f"One of: {', '.join(PORTAL_LINK_KINDS)}.")],
+    url: Annotated[str, typer.Option("--url", help="A URL discovery actually opened -- never built.")],
+    label: Annotated[str, typer.Option("--label", help='e.g. "ALEKS Gradebook".')] = "",
+) -> None:
+    """Save a static, bookmarkable URL into one of a course's areas (home,
+    grades, announcements, content, dropbox list, an external platform's
+    gradebook...) so the daily run goes straight there. Idempotent by
+    (course, kind, label)."""
+    if kind not in PORTAL_LINK_KINDS:
+        console.print(f"[red]--kind must be one of {', '.join(PORTAL_LINK_KINDS)}.[/red]")
+        raise typer.Exit(1)
+    with session_scope() as session:
+        course_id = _resolve_course_or_exit(session, course).id
+        repository.upsert_portal_link(session, CoursePortalLink(
+            id=uuid.uuid4().hex, course_id=course_id, kind=kind, url=url, label=label,
+        ))
+    console.print(f"[green]Saved[/green] {kind} link for {course}.")
+
+
+@app.command("portal-link-list")
+def portal_link_list_cmd(
+    course: Annotated[str, typer.Option("--course")],
+    as_json: Annotated[bool, typer.Option("--json")] = False,
+) -> None:
+    """List a course's saved portal links."""
+    with session_scope() as session:
+        course_id = _resolve_course_or_exit(session, course).id
+        links = repository.list_portal_links(session, course_id)
+    if as_json:
+        print(json.dumps([{"kind": x.kind, "label": x.label, "url": x.url} for x in links]))
+        return
+    for x in links:
+        console.print(f"{x.kind:<20} {escape(x.label):<24} {escape(x.url)}")
+
+
+@app.command("digest-deadlines")
+def digest_deadlines_cmd(
+    course: Annotated[str, typer.Option("--course")],
+    on: Annotated[str | None, typer.Option("--date", help="YYYY-MM-DD (default: today).")] = None,
+) -> None:
+    """JSON list of this course's actionable items due yesterday and today
+    (plus the next 3 days), each with its best action link -- the morning
+    crawl checks each one's submission status and reports it back in
+    `digest-ingest`'s `deadline_status`."""
+    day = date.fromisoformat(on) if on else date.today()
+    with session_scope() as session:
+        course_id = _resolve_course_or_exit(session, course).id
+        items = repository.list_items_for_course(session, course_id)
+    out: list[dict[str, str | None]] = []
+    for when, lines in (
+        ("yesterday", digest_mod.deadline_lines(items, day - timedelta(days=1))),
+        ("today", digest_mod.deadline_lines(items, day)),
+        ("upcoming", digest_mod.upcoming_lines(items, day, 3)),
+    ):
+        out.extend(
+            {
+                "when": when, "item_id": d.item_id, "title": d.title,
+                "due_on": d.due_on.isoformat(),
+                "due_time": d.due_time.isoformat() if d.due_time else None, "url": d.url,
+            }
+            for d in lines
+        )
+    print(json.dumps(out))
+
+
+@app.command("digest-ingest")
+def digest_ingest_cmd(
+    file: Annotated[Path, typer.Option("--file", help="Path to the crawl JSON (digest.DigestCrawl).")],
+) -> None:
+    """Record one course's morning crawl: new/changed announcements and
+    grades (deduped -- something already emailed is never re-sent unless
+    its content changed), needs-attention triggers, the day's overall grade
+    snapshot, and the per-day facts `digest-render` needs.
+
+    First run for a course: anything dated more than 2 days before the
+    crawl (or undated) is stored as already reported, so the first email
+    isn't flooded with the whole term's history."""
+    try:
+        crawl = digest_mod.DigestCrawl.model_validate_json(file.read_text(encoding="utf-8"))
+    except (OSError, ValidationError) as exc:
+        console.print(f"[red]Could not read crawl JSON: {exc}[/red]")
+        raise typer.Exit(1) from None
+    with session_scope() as session:
+        course = _resolve_course_or_exit(session, crawl.course)
+        existing = repository.get_daily_digest_record(session, course.id, crawl.captured_on)
+        if existing is not None and existing.sent:
+            console.print(f"[yellow]Already sent/skipped for {crawl.captured_on}; "
+                          "recording the crawl, but nothing new will email today.[/yellow]")
+        baseline_before = None
+        if repository.count_digest_entries(session, course.id) == 0:
+            baseline_before = crawl.captured_on - timedelta(days=2)
+        week_ago = repository.get_course_grade_snapshot_on_or_before(
+            session, course.id, crawl.captured_on - timedelta(days=7)
+        )
+        counts = {"new": 0, "updated": 0, "seen": 0, "baseline": 0}
+        signal_candidates = []
+        entries = digest_mod.entries_from_crawl(crawl)
+        if not crawl.login_failed:
+            entries += digest_mod.attention_entries(crawl, week_ago=week_ago)
+        for entry in entries:
+            is_baseline = baseline_before is not None and (
+                entry.dated is None or entry.dated < baseline_before
+            )
+            result = repository.record_digest_entry(
+                session, course_id=course.id, kind=entry.kind, external_id=entry.external_id,
+                content_hash=entry.content_hash, payload=entry.payload,
+                already_reported_on=crawl.captured_on if is_baseline else None,
+            )
+            counts["baseline" if is_baseline and result == "new" else result] += 1
+            if (
+                entry.kind == digest_mod.KIND_GRADE and result in ("new", "updated")
+                and not is_baseline and entry.payload.get("is_major")
+                and entry.payload.get("score_percent") is not None
+                and entry.payload["score_percent"] < diagnostics_mod.RED_MAJOR_ASSESSMENT_FLOOR
+                and entry.payload.get("chapter_label")
+            ):
+                signal_candidates.append(
+                    {"title": entry.payload["title"], "chapter_label": entry.payload["chapter_label"],
+                     "score_percent": entry.payload["score_percent"]}
+                )
+        if crawl.overall_percent is not None and not crawl.login_failed:
+            repository.add_course_grade_snapshot(session, CourseGradeSnapshot(
+                id=uuid.uuid4().hex, course_id=course.id, week_start=crawl.captured_on,
+                captured_at=crawl.captured_on, overall_percent=crawl.overall_percent,
+                letter_grade=crawl.letter_grade,
+            ))
+        repository.upsert_daily_digest_record(
+            session, course_id=course.id, digest_date=crawl.captured_on,
+            crawl=crawl.model_dump(mode="json"),
+        )
+    print(json.dumps({"course": course.course_code, **counts,
+                      "signal_candidates": signal_candidates}))
+
+
+@app.command("digest-render")
+def digest_render_cmd(
+    course: Annotated[str, typer.Option("--course")],
+    on: Annotated[str | None, typer.Option("--date", help="YYYY-MM-DD (default: today).")] = None,
+) -> None:
+    """Print this course's Daily Overview email as JSON: {should_send,
+    already_sent, to, subject, html, text}. `should_send` is false on a
+    quiet day (nothing new, missed, or due today) or when today's email
+    already went out. Run after `digest-ingest`; pass the html/text
+    verbatim to Gmail's send_message, then `digest-record-sent`."""
+    day = date.fromisoformat(on) if on else date.today()
+    with session_scope() as session:
+        c = _resolve_course_or_exit(session, course)
+        record = repository.get_daily_digest_record(session, c.id, day)
+        crawl = digest_mod.DigestCrawl.model_validate(
+            record.crawl if record and record.crawl
+            else {"course": c.course_code, "captured_on": day.isoformat(), "login_failed": True}
+        )
+        week_ago = repository.get_course_grade_snapshot_on_or_before(
+            session, c.id, day - timedelta(days=7)
+        ) or repository.get_previous_course_grade_snapshot(session, c.id, before=day)
+        overview = digest_mod.build_overview(
+            course_code=c.course_code, course_name=c.name, digest_date=day,
+            login_failed=crawl.login_failed, overall_percent=crawl.overall_percent,
+            letter_grade=crawl.letter_grade, week_ago=week_ago, advice=crawl.advice,
+            pending=repository.list_pending_digest_entries(session, c.id),
+            items=repository.list_items_for_course(session, c.id),
+            statuses={s.item_id: (s.submitted, s.window_open) for s in crawl.deadline_status},
+            portal_links=[(x.kind, x.label, x.url) for x in repository.list_portal_links(session, c.id)],
+        )
+        to = repository.get_preference(session, "digest_email_to", default=None)
+    message = build_daily_overview_email(overview)
+    already_sent = bool(record and record.sent)
+    print(json.dumps({
+        "course": c.course_code,
+        "should_send": overview.has_news and not already_sent and bool(to),
+        "already_sent": already_sent,
+        "has_news": overview.has_news,
+        "to": to,
+        "subject": message.subject,
+        "html": message.html,
+        "text": message.text,
+    }))
+
+
+@app.command("digest-record-sent")
+def digest_record_sent_cmd(
+    course: Annotated[str, typer.Option("--course")],
+    on: Annotated[str | None, typer.Option("--date", help="YYYY-MM-DD (default: today).")] = None,
+    message_id: Annotated[str | None, typer.Option("--message-id")] = None,
+    skipped: Annotated[bool, typer.Option("--skipped", help="Quiet day -- nothing sent.")] = False,
+) -> None:
+    """Record today's outcome for one course. With --message-id (the Gmail
+    send result), every pending digest entry is marked emailed. With
+    --skipped (a quiet day), entries stay pending -- nothing was shown."""
+    if not message_id and not skipped:
+        console.print("[red]Pass --message-id (sent) or --skipped (quiet day).[/red]")
+        raise typer.Exit(1)
+    day = date.fromisoformat(on) if on else date.today()
+    with session_scope() as session:
+        course_id = _resolve_course_or_exit(session, course).id
+        marked = repository.mark_digest_entries_emailed(session, course_id, day) if message_id else 0
+        repository.upsert_daily_digest_record(
+            session, course_id=course_id, digest_date=day,
+            gmail_message_id=message_id, skipped=skipped,
+        )
+    console.print(f"[green]Recorded[/green] {course} {day}: "
+                  + (f"sent ({marked} entries marked emailed)" if message_id else "skipped (quiet day)"))
 
 # --------------------------------------------------------------------------
 # preferences

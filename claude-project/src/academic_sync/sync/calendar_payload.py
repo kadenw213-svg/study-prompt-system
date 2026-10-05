@@ -13,8 +13,14 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
-from academic_sync.chapter_topics import split_chapter_segments
-from academic_sync.models.domain import AcademicItem, Course, Source
+from academic_sync.chapter_topics import (
+    ReadingEntry,
+    build_reading_entries,
+    build_topic_detail_blocks,
+    canonicalize_chapter_label,
+    split_chapter_segments,
+)
+from academic_sync.models.domain import AcademicItem, ChapterTopic, Course, Source, WeeklyLink
 from academic_sync.models.enums import DiagnosticStatus, ItemType, SourceType
 from academic_sync.reconciliation.fingerprint import compute_calendar_fingerprint
 
@@ -458,6 +464,9 @@ def _reference_lines(item: AcademicItem) -> list[str]:
     if item.reference_url:
         label = item.reference_url_label or "D2L"
         lines.append(f'<a href="{item.reference_url}">{label}</a>')
+    if item.submission_url:
+        label = item.submission_url_label or "Submit Work"
+        lines.append(f'<a href="{item.submission_url}">{label}</a>')
     if item.resource_url:
         label = item.resource_url_label or "Textbook"
         lines.append(f'<a href="{item.resource_url}">{label}</a>')
@@ -633,43 +642,111 @@ def build_meeting_description(
     return _assemble_within_budget(blocks, flexible_index)
 
 
+_KIND_KEYWORDS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("slides", ("slide", "powerpoint", "ppt", "deck")),
+    ("video", ("video", "youtube", "recording", "lecture capture", "panopto")),
+    ("handout", ("handout", "worksheet", "activity", "practice")),
+    ("textbook", ("textbook", "reading", "ebook", "e-book", "openstax", "libretexts", "chapter text")),
+)
+
+_RESOURCE_KIND_ORDER = ("slides", "video", "handout", "platform", "other")
+
+
+def link_kind(link: WeeklyLink) -> str:
+    """A link's resource kind: its explicit `kind` when set, otherwise
+    classified from its label/URL (links saved before 2026-10-05 have no
+    `kind`). Pure presentation grouping -- never changes which links
+    exist, only where on the banner they render."""
+    if link.kind:
+        return link.kind
+    text = f"{link.label} {link.url}".lower()
+    for kind, words in _KIND_KEYWORDS:
+        if any(w in text for w in words):
+            return kind
+    return "other"
+
+
+def _reading_section(entries: list[ReadingEntry], textbook_links: list[WeeklyLink]) -> str | None:
+    """READING: one block per chapter -- bold header, a "Big topics" line
+    from the chapter's real section headings, then its chapter-specific
+    reading link. A chapter with no saved `reading_url` takes a textbook
+    link whose `chapter` matches it; textbook links not tied to any
+    listed chapter (e.g. a general eBook access point) follow the
+    chapters. Never padded: a chapter with no link simply has none."""
+    remaining = list(textbook_links)
+    blocks: list[str] = []
+    for entry in entries:
+        lines = [f"<b>{entry.header}</b>"]
+        if entry.sections:
+            lines.append("Big topics: " + " · ".join(entry.sections))
+        url, label = entry.reading_url, entry.reading_label
+        if url is None and entry.chapter_label:
+            key = canonicalize_chapter_label(entry.chapter_label)
+            for link in remaining:
+                if link.chapter and canonicalize_chapter_label(link.chapter) == key:
+                    url, label = link.url, link.label
+                    remaining.remove(link)
+                    break
+        if url:
+            lines.append(f'→ <a href="{url}">{label or "Reading — " + entry.header}</a>')
+        blocks.append("<br>".join(lines))
+    extra = [f'→ <a href="{link.url}">{link.label}</a>' for link in remaining]
+    if extra:
+        blocks.append("<br>".join(extra))
+    return "<br><br>".join(blocks) if blocks else None
+
+
 def build_weekly_reading_description(
     item: AcademicItem,
     course: Course,
     *,
-    this_week: str | None = None,
+    chapter_topics: dict[str, ChapterTopic] | None = None,
     pacing: str | None = None,
 ) -> str:
-    """A WEEKLY_READING item's `title` holds the week's chapter/topic
-    content in the same "Chapter N: Topic; Chapter M: Topic" shape a
-    multi-chapter lecture title uses (see `_topic_line`/
-    `chapter_topics.split_chapter_segments`) -- deliberately reused here
-    rather than a second chapter-list mechanism.
+    """The weekly banner is the student's course shell for that week
+    (user-directed redesign, 2026-10-05 -- CLAUDE.md invariant 25):
 
-    `this_week` is pre-formatted HTML (built via `chapter_topics.
-    build_chapter_topic_blocks` + `format_details_blocks` by the caller,
-    which has DB access this module deliberately doesn't -- see CLAUDE.md
-    invariant 26) carrying each chapter's real saved vocabulary/objectives.
-    When `None` (no saved chapter topics yet, or the caller didn't look),
-    falls back to the bare `_topic_line(item.title)` chapter-list line --
-    same behavior as before this parameter existed, never blocked on
-    missing enrichment.
+    1. READING -- every chapter due that week, each with its real section
+       headings as a short "Big topics" line and its chapter-specific
+       reading link (`ChapterTopic.reading_url`, or a textbook-kind
+       `weekly_links` entry tagged with that chapter).
+    2. SLIDES & RESOURCES -- every non-textbook `weekly_links` entry,
+       grouped slides → video → handout → platform → other.
+    3. PACING -- only the source's own stated internal timing, never
+       invented (invariant 22).
+    4. TOPIC DETAIL -- the full saved vocabulary + objectives per chapter,
+       never summarized; the quiz GPT builds its concept list from it.
+       The one block the length budget may truncate (line-level, with a
+       visible note).
+    5. CONTACT, then DATES last (before the fingerprint tag).
 
-    `pacing` is only ever the source's own stated internal timing (e.g.
-    "Ch. 2 by Wednesday") -- never invented; omitted entirely when the
-    source gives no such breakdown (CLAUDE.md invariant 22's "never
-    synthesize" bar applies here exactly as it does to lecture DETAILS).
-    This is a genuinely different concept from `this_week`'s content depth
-    -- don't conflate the two.
-
-    No POINTS/STATUS/LOCATION/REQUIRED RESOURCES -- this is an
-    informational, non-graded block, not a deliverable. DATES is
-    deliberately the last section (after CONTACT/LINKS, right before the
-    fingerprint tag `embed_fingerprint_tag` appends outside this function)
-    -- user-directed, 2026-08-25: the date range used to be in the title
-    (`"<CODE> Readings (<range>)"`); the title is now just `"<CODE> Weekly
-    Overview"` and the range moved down here instead."""
+    `item.title` holds the week's "Chapter N: Topic; Chapter M: Topic"
+    list (`chapter_topics.split_chapter_segments`). `chapter_topics` maps
+    `canonicalize_chapter_label` -> saved `ChapterTopic` -- passed in by
+    the caller, which has DB access this module deliberately doesn't.
+    Syllabus links are always dropped (`_looks_like_syllabus`). When the
+    item has no `weekly_links`, its legacy reference_url/resource_url pair
+    renders under SLIDES & RESOURCES instead."""
+    topics = chapter_topics or {}
     header = f"{course.course_code} - {course.name}"
+    segments = split_chapter_segments(item.title) if item.title else []
+
+    links = [
+        link for link in item.weekly_links
+        if not _looks_like_syllabus(f"{link.label} {link.url}")
+    ]
+    textbook_links = [link for link in links if link_kind(link) == "textbook"]
+    resource_lines: list[str] = []
+    for kind in _RESOURCE_KIND_ORDER:
+        resource_lines.extend(
+            f'<a href="{link.url}">{link.label}</a>'
+            for link in links
+            if link_kind(link) == kind
+        )
+    if not item.weekly_links:
+        resource_lines = [
+            line for line in _reference_lines(item) if not _looks_like_syllabus(line)
+        ]
 
     blocks = []
     synthesized_tag = _synthesized_tag(course)
@@ -679,24 +756,22 @@ def build_weekly_reading_description(
     if inferred_tag:
         blocks.append(inferred_tag)
     blocks.append(header)
-    # THIS WEEK is the one section that can legitimately grow large now
-    # that chapter-topic capture is required to be exhaustive (CLAUDE.md
-    # invariant 26) -- flexible_index marks it so _assemble_within_budget
-    # truncates only it, never CONTACT/LINKS/DATES below, if the real
-    # Calendar description length limit would otherwise be exceeded.
-    flexible_index: int | None = None
-    this_week_content = this_week or (_topic_line(item.title) if item.title else None)
-    if this_week_content:
-        flexible_index = len(blocks)
-        blocks.append(_section("THIS WEEK", this_week_content))
+    reading = _reading_section(build_reading_entries(segments, topics), textbook_links)
+    if reading:
+        blocks.append(_section("READING", reading))
+    if resource_lines:
+        blocks.append(_section("SLIDES &amp; RESOURCES", "<br>".join(resource_lines)))
     if pacing:
         blocks.append(_section("PACING", pacing))
+    flexible_index: int | None = None
+    detail_blocks = build_topic_detail_blocks(segments, topics)
+    if detail_blocks:
+        flexible_index = len(blocks)
+        detail = format_details_blocks([DetailsBlock(**b) for b in detail_blocks])
+        blocks.append(_section("TOPIC DETAIL", detail))
     contact = _contact_line(course)
     if contact:
         blocks.append(_section("CONTACT", contact))
-    ref_lines = _supplemental_link_lines(item)
-    if ref_lines:
-        blocks.append(_section("LINKS", "<br>".join(ref_lines)))
     if item.date is not None and item.date_range_end is not None:
         blocks.append(_section("DATES", _format_date_range(item.date, item.date_range_end)))
     if flexible_index is None:

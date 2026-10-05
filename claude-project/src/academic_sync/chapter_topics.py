@@ -12,6 +12,7 @@ lookups both build on it rather than each keeping their own copy.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass, field
 from typing import Any
 
 from academic_sync.models.domain import ChapterTopic
@@ -99,3 +100,65 @@ def build_chapter_topic_blocks(
         else:
             blocks.append({"text": header})
     return blocks
+
+
+@dataclass
+class ReadingEntry:
+    """One chapter's entry in a weekly banner's READING section: its
+    header ("Chapter 23 — Evolution of Populations"), its real section
+    headings (the short "Big topics" line), and its chapter-specific
+    reading link, when one has been captured. Plain data so this module
+    stays free of any `sync.calendar_payload` dependency (see
+    `build_chapter_topic_blocks`'s docstring for why)."""
+
+    header: str
+    chapter_label: str | None = None
+    sections: list[str] = field(default_factory=list)
+    reading_url: str | None = None
+    reading_label: str | None = None
+
+
+def build_reading_entries(
+    segments: list[tuple[str | None, str]],
+    topics_by_label: dict[str, ChapterTopic],
+) -> list[ReadingEntry]:
+    """One `ReadingEntry` per segment of a weekly banner's chapter list.
+    A chapter with a saved `ChapterTopic` contributes its title (when the
+    banner's own segment has none), section headings, and reading link;
+    one without a saved row still gets a bare header -- thin but true,
+    same rule as `build_chapter_topic_blocks`. A non-chapter segment
+    (label `None`) becomes a header-only entry with its text verbatim."""
+    entries: list[ReadingEntry] = []
+    for label, topic_text in segments:
+        if label is None:
+            entries.append(ReadingEntry(header=topic_text))
+            continue
+        topic = topics_by_label.get(canonicalize_chapter_label(label))
+        text = topic_text or (topic.title if topic and topic.title else "")
+        header = f"{label} — {text}" if text else label
+        if topic is None:
+            entries.append(ReadingEntry(header=header, chapter_label=label))
+            continue
+        entries.append(ReadingEntry(
+            header=header,
+            chapter_label=label,
+            sections=list(topic.sections),
+            reading_url=topic.reading_url,
+            reading_label=topic.reading_label,
+        ))
+    return entries
+
+
+def build_topic_detail_blocks(
+    segments: list[tuple[str | None, str]],
+    topics_by_label: dict[str, ChapterTopic],
+) -> list[dict[str, Any]]:
+    """TOPIC DETAIL content for a weekly banner: the full vocabulary +
+    objectives list for every chapter that has a saved `ChapterTopic`
+    with real items -- never summarized (the quiz GPT builds its concept
+    list from this). Chapters with nothing captured are left out here;
+    they already appear by name in READING."""
+    return [
+        b for b in build_chapter_topic_blocks(segments, topics_by_label)
+        if b.get("items")
+    ]

@@ -106,7 +106,9 @@ class AcademicItemRow(Base):
     reference_url_label: Mapped[str | None] = mapped_column(default=None)
     resource_url: Mapped[str | None] = mapped_column(default=None)
     resource_url_label: Mapped[str | None] = mapped_column(default=None)
-    # WEEKLY_READING only -- JSON list of {"label", "url"} (see
+    submission_url: Mapped[str | None] = mapped_column(default=None)
+    submission_url_label: Mapped[str | None] = mapped_column(default=None)
+    # WEEKLY_READING / meetings -- JSON list of {"label", "url", "kind", "chapter"} (see
     # domain.WeeklyLink). Empty list for every other item type.
     weekly_links_json: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list)
     link_available_date: Mapped[_date | None] = mapped_column(Date, default=None)
@@ -178,6 +180,9 @@ class ChapterTopicRow(Base):
     vocabulary: Mapped[str | None] = mapped_column(default=None)
     objectives_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     is_exhaustive: Mapped[bool] = mapped_column(Boolean, default=False)
+    sections_json: Mapped[list[str]] = mapped_column(JSON, default=list)
+    reading_url: Mapped[str | None] = mapped_column(default=None)
+    reading_label: Mapped[str | None] = mapped_column(default=None)
     source_ids_json: Mapped[list[str]] = mapped_column(JSON, default=list)
     source_wording: Mapped[str | None] = mapped_column(default=None)
     first_seen: Mapped[datetime] = mapped_column(DateTime, default=_now)
@@ -283,3 +288,46 @@ class SchemaVersionRow(Base):
     id: Mapped[int] = mapped_column(primary_key=True, default=1)
     version: Mapped[int]
     applied_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class CoursePortalLinkRow(Base):
+    __tablename__ = "course_portal_links"
+    __table_args__ = (UniqueConstraint("course_id", "kind", "label", name="uq_portal_link"),)
+
+    id: Mapped[str] = mapped_column(primary_key=True, default=_uuid)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), index=True)
+    kind: Mapped[str]
+    label: Mapped[str] = mapped_column(default="")
+    url: Mapped[str]
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class DigestEntryRow(Base):
+    __tablename__ = "digest_entries"
+    __table_args__ = (
+        UniqueConstraint("course_id", "kind", "external_id", name="uq_digest_entry"),
+    )
+
+    id: Mapped[str] = mapped_column(primary_key=True, default=_uuid)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), index=True)
+    kind: Mapped[str]
+    external_id: Mapped[str]
+    content_hash: Mapped[str]
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    first_seen: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    emailed_on: Mapped[_date | None] = mapped_column(Date, default=None)
+
+
+class DailyDigestRecordRow(Base):
+    __tablename__ = "daily_digest_records"
+    __table_args__ = (
+        UniqueConstraint("course_id", "digest_date", name="uq_daily_digest_course_date"),
+    )
+
+    id: Mapped[str] = mapped_column(primary_key=True, default=_uuid)
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id"), index=True)
+    digest_date: Mapped[_date] = mapped_column(Date, index=True)
+    gmail_message_id: Mapped[str | None] = mapped_column(default=None)
+    skipped: Mapped[bool] = mapped_column(Boolean, default=False)
+    crawl_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
