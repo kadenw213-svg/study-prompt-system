@@ -70,23 +70,16 @@ the same grade warning daily.
    - From then on, navigate straight to saved links; don't click through
      the shell.
 
-## Step 1: log in (invariant 39)
+## Step 1: check the D2L session (invariant 39 -- you never sign in)
 
 1. Open the `d2l_base_url` preference.
-2. If it lands on the D2L homepage, you're logged in.
-3. If it redirects to the institution's SSO sign-in page (the host in
-   `config/personal.local.md`'s `sso_host` -- check that the page you're
-   on matches it), the user has authorized you to click **Sign In** when
-   the username and password fields are already filled (by Chrome or
-   LastPass).
-   - If the fields are empty, click the password manager's in-field icon
-     once (LastPass), wait about 5 seconds, and check again.
-   - **Never type, read out, copy, or store the password.** Never sign in
-     anywhere except that SSO page.
-4. Still not in? That includes empty fields, an MFA or CAPTCHA prompt, an
-   error, or an unfamiliar page. Then the run continues with
-   `login_failed: true` for every course. The email still goes out, built
-   from local deadlines, with a visible "D2L login failed" warning.
+2. If it lands on the D2L homepage, you're logged in. Continue.
+3. If it redirects to any sign-in page, **do not sign in.** That means
+   don't click Sign In, don't trigger a password manager's fill, and
+   don't type anything. The run continues with `login_failed: true` for
+   every course. Each email still goes out, built from local deadlines,
+   with a visible "D2L needs you to sign in" warning that links the D2L
+   home page. The next run after the user signs in catches up.
 
 ## Step 2: crawl each course (bounded: aim for no more than about 10 page loads per course)
 

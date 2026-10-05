@@ -170,7 +170,7 @@ def test_login_failed_always_sends_with_warning(tmp_path):
     _ingest(tmp_path, {"course": "MAT1340", "captured_on": TODAY.isoformat(), "login_failed": True})
     rendered = _render()
     assert rendered["should_send"] is True
-    assert "D2L login failed" in rendered["html"]
+    assert "D2L needs you to sign in" in rendered["html"]
 
 
 def test_attention_reported_once_not_daily(tmp_path):

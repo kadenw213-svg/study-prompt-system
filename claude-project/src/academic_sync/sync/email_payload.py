@@ -155,10 +155,14 @@ def build_daily_overview_email(o: DailyOverview) -> EmailMessage:
         text.append(f"Advice: {o.advice}")
 
     if o.login_failed:
-        msg = ("D2L login failed this morning, so announcements and grades weren't checked. "
-               "Deadlines below come from your saved calendar data.")
-        html.append(f'<p style="background:#fef3c7;padding:8px;border-radius:4px">⚠ {msg}</p>')
-        text.append(f"!! {msg}")
+        msg = ("D2L needs you to sign in, so this morning's announcements and grades weren't "
+               "checked. Deadlines below come from your saved calendar data; sign in once and "
+               "tomorrow's email catches up.")
+        home = next((url for label, url in o.portal_links if label.lower() in ("home", "course home")),
+                    None)
+        link = f" {_a(home, 'Open D2L')}" if home else ""
+        html.append(f'<p style="background:#fef3c7;padding:8px;border-radius:4px">⚠ {msg}{link}</p>')
+        text.append(f"!! {msg}" + (f" {home}" if home else ""))
 
     def section(title: str, body: list[str], body_text: list[str], as_list: bool = False) -> None:
         if not body:

@@ -1057,24 +1057,23 @@ to add either; that decision was deliberate, not an oversight.
       `digest-ingest` / `digest-render` / `digest-record-sent` /
       `portal-link-set` / `portal-link-list`, migration `_0017`.
 
-39. **Clicking Sign In on the institution's pre-filled SSO login is
-    authorized; storing or typing the password never is.** User-directed
-    2026-10-05, so the 5am run can work unattended.
-    - **Allowed:** when D2L redirects to the institution's own SSO sign-in
-      page (its host is recorded in `config/personal.local.md`'s
-      `sso_host`; never named in a committed file) and the
-      username/password fields are already filled by the user's password
-      manager (Chrome or LastPass), Claude may click **Sign In**. If the fields are empty, Claude may click
-      the password manager's in-field fill icon once.
-    - **Never:** type, read out, copy, log, or store the password
-      anywhere -- not in the DB, not in any file, and certainly not in
-      the public `claude-project/` copy -- and never sign in on any other
-      site.
-    - **On failure** (an MFA/CAPTCHA prompt, empty fields after one fill
-      attempt, an error, or an unfamiliar page): the run continues with
-      `login_failed: true`, and each email says so at the top.
-    - This supersedes the older "the user always clicks Sign In" note,
-      for this one page only.
+39. **Claude never signs in -- the unattended run rides the user's existing
+    Chrome session.** Corrected 2026-10-05. The user asked for Claude to
+    click Sign In on the pre-filled SSO page (and even to store the
+    password) so the 5am run could be fully autonomous. Claude's own
+    safety rules don't allow it to submit a login with a password,
+    whoever fills it in or authorizes it. So:
+    - Never click Sign In, never trigger a password manager's fill, never
+      type, store, or log a password. That covers the DB, any file, and
+      the public `claude-project/` copy.
+    - `/daily-overview` uses whatever D2L session Chrome already has.
+    - If D2L redirects to a sign-in page, the run continues with
+      `login_failed: true`. Each email then says at the top that D2L needs
+      a sign-in, and gives the D2L home link, so the user can sign in once
+      and the next run catches up.
+    - Keeping Chrome signed in (the SSO session cookie persists in the
+      real Chrome profile until the institution's timeout) is what keeps
+      most mornings fully automatic.
 
 A graded item can legitimately have no `reference_url`/`resource_url` for a
 reason other than "nobody looked": D2L showed it locked behind an explicit
