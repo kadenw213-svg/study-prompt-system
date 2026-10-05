@@ -159,12 +159,12 @@ def attention_entries(
             text = f"{g.title} was graded 0%."
             out.append(EntryToRecord(KIND_ATTENTION, f"zero:{g.id}", content_hash({"t": text}),
                                      {"text": text, "url": g.feedback_url or g.item_url},
-                                     crawl.captured_on))
+                                     g.graded_on or crawl.captured_on))
         elif g.is_major and g.score_percent < RED_MAJOR_ASSESSMENT_FLOOR:
             text = f"{g.title} scored {g.score_percent:g}% (under {RED_MAJOR_ASSESSMENT_FLOOR:g}%)."
             out.append(EntryToRecord(KIND_ATTENTION, f"major:{g.id}", content_hash({"t": text}),
                                      {"text": text, "url": g.feedback_url or g.item_url},
-                                     crawl.captured_on))
+                                     g.graded_on or crawl.captured_on))
     if crawl.missing_count is not None and crawl.missing_count >= RED_MISSING_COUNT:
         text = f"{crawl.missing_count} assignments are marked missing."
         key = f"missing:{crawl.missing_count}"
@@ -200,6 +200,8 @@ def is_actionable(item: AcademicItem) -> bool:
         return False
     if item.item_type in (ItemType.READING, ItemType.WEEKLY_READING):
         return False
+    if item.item_type in (ItemType.EXAM, ItemType.FINAL_EXAM, ItemType.LAB_PRACTICAL):
+        return True
     return item.item_type.is_deadline or item.due_time is not None
 
 

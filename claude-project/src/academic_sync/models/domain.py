@@ -352,8 +352,12 @@ class CoursePortalLink(BaseModel):
 
 
 PORTAL_LINK_KINDS = (
+    # course areas
     "home", "grades", "announcements", "content", "dropbox", "quizzes",
-    "discussions", "calendar", "external_home", "external_gradebook", "other",
+    "discussions", "calendar", "external_home", "external_gradebook",
+    # individual objects (the URL registry: anything scraped once gets its
+    # direct URL saved, so later runs load it instead of clicking through)
+    "assignment", "quiz", "content_topic", "grade_item", "module", "other",
 )
 
 

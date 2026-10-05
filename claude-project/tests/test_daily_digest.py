@@ -230,3 +230,20 @@ def test_portal_link_set_and_course_code_resolution(tmp_path):
     assert bad.exit_code == 1
     listed = json.loads(runner.invoke(app, ["portal-link-list", "--course", "MAT1340", "--json"]).stdout)
     assert listed == [{"kind": "grades", "label": "", "url": "https://d2l.example/grades"}]
+
+
+def test_exam_without_due_time_still_counts_as_actionable(tmp_path):
+    course_id = _setup(tmp_path)
+    _add_item(course_id, "Online Exam: Chapter 3", date(2026, 10, 5), item_type=ItemType.EXAM, due_time=None)
+    rows = json.loads(runner.invoke(app, ["digest-deadlines", "--course", "MAT1340", "--date", TODAY.isoformat()]).stdout)
+    assert [r["title"] for r in rows if r["when"] == "yesterday"] == ["Online Exam: Chapter 3"]
+
+
+def test_first_run_does_not_flag_old_bad_grades(tmp_path):
+    _setup(tmp_path)
+    _ingest(tmp_path, {"course": "MAT1340", "captured_on": TODAY.isoformat(), "grades": [
+        {"id": "old", "title": "Exam 1", "score_percent": 20, "is_major": True, "graded_on": "2026-09-01"},
+        {"id": "new", "title": "Exam 3", "score_percent": 15, "is_major": True, "graded_on": TODAY.isoformat()},
+    ]})
+    html = _render()["html"]
+    assert "Exam 3 scored 15%" in html and "Exam 1 scored" not in html

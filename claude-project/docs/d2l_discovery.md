@@ -809,6 +809,23 @@ that list would silently recreate the exact same gap. Instead:
      entry point and name the exact target in the label. Examples:
      `"ALEKS — Objective 4: Exponents (open from your ALEKS home)"`, or
      `"Connect — Ch 23 SmartBook assignment"`.
+   - **Session-locked readers stop here.** Verified 2026-10-05 on
+     MAT1340's McGraw Hill eBook, opened from ALEKS (Menu → Textbook →
+     E-Book). It opens in a pop-up at
+     `prod.reader-ui.prod.mheducation.com/epub/sn_<book>/data-uuid-<id>`,
+     which looks per-location, but the same URL returns **401 "You do not
+     have access to your eBook"** when opened in any fresh tab. Only the
+     window ALEKS launches gets the access pass. ALEKS's own pages are
+     one-time `Isl.exe/<token>` URLs. A reader like this can't be
+     deep-linked, so the chapter's `--reading-url` is the platform's D2L
+     launch item, labeled with the click path (e.g. `"ALEKS eBook — Ch 4
+     (in ALEKS: Menu → Textbook → E-Book)"`). Add section page numbers to
+     the label or `--section` values only if you can read them
+     autonomously. Don't spend more than a couple of attempts, and never
+     ask the user to do manual steps for this (user-directed: "just
+     linking to the textbook in a situation like this is the best").
+     Other platforms (Connect, Pearson, OpenStax) still get the full
+     search and fresh-tab test.
    - Save what you find where it belongs:
      - a chapter's reading → `chapter-topic-add --reading-url`
      - lessons and objectives → banner `--links` with `"kind":
