@@ -1271,7 +1271,6 @@ neither optional:
      → Textbook — Ch 23 reading            (chapter-specific link)
      (next chapter ...)
    SLIDES & RESOURCES                       (slides → video → handouts → platform → other)
-   PACING                                   (only when the source states it)
    TOPIC DETAIL                             (every saved objective + vocabulary, never summarized)
    CONTACT · DATES
    ```
@@ -1334,8 +1333,9 @@ neither optional:
    (`_looks_like_syllabus`). An absent resource is an honest gap; don't
    pad it with a course-home link.
 
-   `--details` on `render` is for PACING only: real, source-stated timing
-   within the week, never invented. `render` adds DATES automatically.
+   There is **no PACING section** (removed 2026-10-07). List the whole
+   week's material, including anything the instructor marks "work ahead".
+   `render` adds DATES automatically.
    Then do create_event/update_event + `record-sync`, the same Step 5 flow
    as any other item. Changing a `ChapterTopic` doesn't flag already-synced
    banners for re-push by itself (chapter topics aren't item fields), so

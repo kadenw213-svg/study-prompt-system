@@ -65,6 +65,20 @@ class CrawlDeadlineStatus(BaseModel):
     window_open: bool | None = None  # still accepting a late submission?
 
 
+class CrawlMessage(BaseModel):
+    """A D2L internal message (Email tool). Spam and college advertising
+    are filtered out by the crawl before it gets here; automated
+    "Submission receipt" messages feed `deadline_status` instead of being
+    reported."""
+
+    id: str
+    subject: str
+    sender: str | None = None
+    received_on: date | None = None
+    excerpt: str | None = None  # short verbatim excerpt of the body
+    url: str | None = None
+
+
 class CrawlLine(BaseModel):
     text: str
     url: str | None = None
@@ -81,6 +95,7 @@ class DigestCrawl(BaseModel):
     deadline_status: list[CrawlDeadlineStatus] = Field(default_factory=list)
     calendar_changes: list[CrawlLine] = Field(default_factory=list)
     needs_you: list[CrawlLine] = Field(default_factory=list)
+    messages: list[CrawlMessage] = Field(default_factory=list)
     missing_count: int | None = None  # D2L/platform's own count of missing work
     # Claude-generated, clearly labeled advice. Only given when the grade
     # moved or new work was graded -- never a daily repeat.
@@ -96,6 +111,12 @@ KIND_GRADE = "grade"
 KIND_ATTENTION = "attention"
 KIND_CALENDAR_CHANGE = "calendar_change"
 KIND_NEEDS_YOU = "needs_you"
+KIND_MESSAGE = "message"
+KIND_STUDY_GUIDE = "study_guide"
+
+GENERAL_COURSE_CODE = "MESSAGES"
+"""Pseudo-course that holds D2L messages not tied to any class -- its
+digest goes out as its own "Daily Overview Messages" email."""
 
 
 def content_hash(data: dict[str, Any]) -> str:
@@ -132,6 +153,11 @@ def entries_from_crawl(crawl: DigestCrawl) -> list[EntryToRecord]:
             content_hash({"score": g.score_percent, "text": g.score_text, "comment": g.comment}),
             payload, g.graded_on,
         ))
+    for m in crawl.messages:
+        payload = m.model_dump(mode="json")
+        out.append(EntryToRecord(KIND_MESSAGE, m.id,
+                                 content_hash({"s": m.subject, "e": m.excerpt}),
+                                 payload, m.received_on))
     for line in crawl.calendar_changes:
         data = line.model_dump(mode="json")
         out.append(EntryToRecord(KIND_CALENDAR_CHANGE, content_hash(data), content_hash(data),
@@ -268,6 +294,8 @@ class DailyOverview:
     upcoming: list[DeadlineLine] = field(default_factory=list)
     calendar_changes: list[dict[str, Any]] = field(default_factory=list)
     needs_you: list[dict[str, Any]] = field(default_factory=list)
+    messages: list[dict[str, Any]] = field(default_factory=list)
+    show_grade: bool = True
     portal_links: list[tuple[str, str]] = field(default_factory=list)  # (label, url)
 
     @property
@@ -285,6 +313,7 @@ class DailyOverview:
             or self.due_today
             or self.calendar_changes
             or self.needs_you
+            or self.messages
         )
 
 
@@ -372,5 +401,7 @@ def build_overview(
         upcoming=upcoming_lines(items, digest_date, upcoming_days),
         calendar_changes=by_kind(KIND_CALENDAR_CHANGE),
         needs_you=by_kind(KIND_NEEDS_YOU),
+        messages=by_kind(KIND_MESSAGE),
+        show_grade=course_code != GENERAL_COURSE_CODE,
         portal_links=footer,
     )

@@ -538,7 +538,9 @@ to add either; that decision was deliberate, not an oversight.
       `reading_label`; migration `_0016`).
     - **SLIDES & RESOURCES** -- every non-textbook `weekly_links` entry,
       grouped by `WeeklyLink.kind`.
-    - **PACING**.
+    - **No PACING section** (removed 2026-10-07, user-directed): the
+      banner lists the whole week's work, work-ahead material included.
+      Every banner generated from now on uses this layout.
     - **TOPIC DETAIL** -- the full saved objectives + vocabulary, never
       summarized. The GPT quiz system's question pool comes from it, and
       it is the only block the length budget may truncate.
@@ -1066,6 +1068,33 @@ to add either; that decision was deliberate, not an oversight.
       `sync/email_payload.py` (HTML), CLI `digest-deadlines` /
       `digest-ingest` / `digest-render` / `digest-record-sent` /
       `portal-link-set` / `portal-link-list`, migration `_0017`.
+
+    **Amended 2026-10-07 -- messages, study materials, new classes.**
+    User-directed:
+    - **D2L messages:** each run reads the D2L message alerts/inbox.
+      - Class messages go in that class's email under **New messages**
+        (matched by instructor, otherwise by subject/body).
+      - Real non-class messages (advising, registrar, financial aid) go in
+        a separate **"Daily Overview Messages"** email, held under the
+        inactive pseudo-course `MESSAGES`.
+      - Spam and college advertising are dropped.
+      - Automated "Submission receipt" messages are evidence for
+        `deadline_status`, not reported.
+    - **Study materials, every run:** upcoming tests (next ~3 weeks) are
+      re-checked for newly posted study guides, review slides, practice
+      exams, review assignments and course-specific equivalents (CHE
+      funsheets, BIO objectives sheets, MAT worksheets / ALEKS chapter
+      review). New finds are added to the test event's STUDY GUIDES.
+    - **New class shells:** each run checks D2L enrollments
+      (`academic-sync shells-check`, `enrollments.py`). A newly accessible
+      real class shell is imported in full right away, unattended:
+      `/academic-import` in unattended mode syncs CLEAR items without an
+      approval gate and sends ambiguities to that class's email. Later
+      mornings keep filling it in as content is posted. Orientation,
+      cross-listed, non-class and past-term shells are skipped.
+    - **"Previous day" by default:** after a course's first email, each
+      email covers only what's new since the last one.
+      `digest-ingest --catch-up-days N` widens only a course's first run.
 
 39. **Claude never signs in -- the unattended run rides the user's existing
     Chrome session.** Corrected 2026-10-05. The user asked for Claude to

@@ -250,3 +250,23 @@ def test_first_run_does_not_flag_old_bad_grades(tmp_path):
     ]})
     html = _render()["html"]
     assert "Exam 3 scored 15%" in html and "Exam 1 scored" not in html
+
+
+def test_class_message_and_general_messages_email(tmp_path):
+    _setup(tmp_path)
+    runner.invoke(app, ["course", "add", "--code", "MESSAGES", "--name", "D2L messages",
+                        "--term", "system"])
+    _ingest(tmp_path, {"course": "MAT1340", "captured_on": TODAY.isoformat(), "messages": [
+        {"id": "m1", "subject": "Exam 3 retake", "sender": "Ann Cushman",
+         "received_on": TODAY.isoformat(), "excerpt": "You may retake Exam 3 by Friday."}]})
+    html = _render()["html"]
+    assert "New messages" in html and "You may retake Exam 3 by Friday." in html
+
+    _ingest(tmp_path, {"course": "MESSAGES", "captured_on": TODAY.isoformat(), "messages": [
+        {"id": "g1", "subject": "Registration opens Nov 2", "sender": "Advising",
+         "received_on": TODAY.isoformat()}]})
+    out = runner.invoke(app, ["digest-render", "--course", "MESSAGES", "--date", TODAY.isoformat()])
+    general = json.loads(out.stdout)
+    assert general["subject"] == "Daily Overview Messages"
+    assert general["should_send"] is True
+    assert "Current grade" not in general["html"] and "Registration opens Nov 2" in general["html"]

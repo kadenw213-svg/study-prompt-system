@@ -16,7 +16,7 @@ from datetime import time
 from html import escape
 from typing import Any
 
-from academic_sync.digest import DailyOverview, DeadlineLine
+from academic_sync.digest import GENERAL_COURSE_CODE, DailyOverview, DeadlineLine
 
 _H3 = (
     'style="margin:18px 0 6px;font-size:15px;color:#1f2937;'
@@ -33,7 +33,20 @@ class EmailMessage:
 
 
 def email_subject(course_code: str) -> str:
+    if course_code == GENERAL_COURSE_CODE:
+        return "Daily Overview Messages"
     return f"Daily Overview {course_code}"
+
+
+def _message_html(m: dict[str, Any]) -> str:
+    head = f"<b>{_a(m.get('url'), m.get('subject') or 'Message')}</b>"
+    meta = " · ".join(x for x in (m.get("sender"), m.get("received_on")) if x)
+    if meta:
+        head += f' <span {_MUTED}>({escape(meta)})</span>'
+    lines = [head]
+    if m.get("excerpt"):
+        lines.append(f'<span style="color:#374151">“{escape(m["excerpt"])}”</span>')
+    return '<p style="margin:6px 0">' + "<br>".join(lines) + "</p>"
 
 
 def _a(url: str | None, label: str) -> str:
@@ -135,7 +148,7 @@ def _line_html(entry: dict[str, Any]) -> str:
 
 
 def build_daily_overview_email(o: DailyOverview) -> EmailMessage:
-    """Order: grade line -> needs attention -> newly graded -> new
+    """Order: grade line -> new messages -> needs attention -> newly graded -> new
     announcements -> missed yesterday -> due today -> coming up -> calendar
     updates -> needs you -> portal footer. Sections with nothing in them
     are omitted, never padded."""
@@ -143,13 +156,15 @@ def build_daily_overview_email(o: DailyOverview) -> EmailMessage:
         '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;'
         'line-height:1.45;color:#111827;max-width:640px">',
         f'<h2 style="margin:0 0 2px;font-size:20px">{escape(o.course_code)} — '
-        f'{escape(o.course_name)}</h2>',
+        f'{escape(o.course_name)}</h2>' if o.show_grade else
+        '<h2 style="margin:0 0 2px;font-size:20px">D2L messages</h2>',
     ]
     text: list[str] = [f"{o.course_code} — {o.course_name}"]
 
-    grade_html, grade_text = _grade_line(o)
-    html.append(grade_html)
-    text.append(grade_text)
+    if o.show_grade:
+        grade_html, grade_text = _grade_line(o)
+        html.append(grade_html)
+        text.append(grade_text)
     if o.advice:
         html.append(f'<p style="margin:2px 0 0"><i>Advice: {escape(o.advice)}</i></p>')
         text.append(f"Advice: {o.advice}")
@@ -174,6 +189,9 @@ def build_daily_overview_email(o: DailyOverview) -> EmailMessage:
         text.append(title.upper())
         text.extend(body_text)
 
+    section("New messages", [_message_html(m) for m in o.messages],
+            [f"- {m.get('subject')} ({m.get('sender') or 'unknown sender'})"
+             + (f' — "{m["excerpt"]}"' if m.get("excerpt") else "") for m in o.messages])
     section("Needs attention", [_line_html(e) for e in o.attention],
             [f"- {e.get('text')}" for e in o.attention], as_list=True)
     section(

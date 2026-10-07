@@ -16,6 +16,12 @@ already -- its invariants (never fabricate dates/nesting/locations/guests,
 idempotency, completeness rules) apply to every step below, not just to the
 Python code.
 
+**Unattended mode (invoked by `/daily-overview` for a newly opened class
+shell):** run every step below with no questions and no approval gate.
+Sync CLEAR items directly, and send anything that would normally be asked
+or approved to that class's email "Needs you" list instead. A shell that's
+still mostly empty is fine; the daily run keeps filling it in.
+
 **This skill is for first-time discovery only.** Recurring maintenance on a
 course already scanned before -- light-crawl re-scans and link refresh --
 lives in `/academic-sync` instead, and daily grade/announcement/feedback

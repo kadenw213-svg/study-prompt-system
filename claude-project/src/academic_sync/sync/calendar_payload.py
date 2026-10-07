@@ -738,8 +738,8 @@ def build_weekly_reading_description(
        `weekly_links` entry tagged with that chapter).
     2. SLIDES & RESOURCES -- every non-textbook `weekly_links` entry,
        grouped slides → video → handout → platform → other.
-    3. PACING -- only the source's own stated internal timing, never
-       invented (invariant 22).
+    3. (No PACING section -- removed 2026-10-07; the banner lists the
+       whole week's work instead.)
     4. TOPIC DETAIL -- the full saved vocabulary + objectives per chapter,
        never summarized; the quiz GPT builds its concept list from it.
        The one block the length budget may truncate (line-level, with a
@@ -787,8 +787,10 @@ def build_weekly_reading_description(
         blocks.append(_section("READING", reading))
     if resource_lines:
         blocks.append(_section("SLIDES &amp; RESOURCES", "<br>".join(resource_lines)))
-    if pacing:
-        blocks.append(_section("PACING", pacing))
+    # No PACING section (user-directed 2026-10-07): the banner lists the
+    # whole week's work; `pacing` is accepted for call-site compatibility
+    # and ignored.
+    del pacing
     flexible_index: int | None = None
     detail_blocks = build_topic_detail_blocks(segments, topics)
     if detail_blocks:

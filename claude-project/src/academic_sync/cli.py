@@ -25,6 +25,7 @@ from rich.table import Table
 from academic_sync import completeness as completeness_mod
 from academic_sync import diagnostics as diagnostics_mod
 from academic_sync import digest as digest_mod
+from academic_sync import enrollments as enrollments_mod
 from academic_sync import preferences as prefs_mod
 from academic_sync.chapter_topics import (
     canonicalize_chapter_label,
@@ -1470,6 +1471,24 @@ def diagnostic_record_sync_cmd(
             details={"event_id": event_id, "week_start": week_start},
         )
     console.print("[green]Recorded.[/green]")
+
+
+@app.command("shells-check")
+def shells_check_cmd(
+    file: Annotated[
+        Path, typer.Option("--file", help="JSON of D2L myenrollments `Items` (or the whole response).")
+    ],
+) -> None:
+    """Print (as JSON) every accessible class shell that isn't imported yet
+    -- the daily run starts a full first-time import for each one. Matching
+    against registered courses uses `Course.d2l_identifier` (the org unit
+    id)."""
+    raw = json.loads(file.read_text(encoding="utf-8"))
+    items = raw.get("Items", raw) if isinstance(raw, dict) else raw
+    with session_scope() as session:
+        registered = {c.d2l_identifier for c in repository.list_courses(session) if c.d2l_identifier}
+    shells = enrollments_mod.find_new_shells(items, {str(r) for r in registered})
+    print(json.dumps([s.__dict__ for s in shells]))
 
 
 # --------------------------------------------------------------------------

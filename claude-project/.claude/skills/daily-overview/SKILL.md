@@ -86,6 +86,31 @@ the same grade warning daily.
    with a visible "D2L needs you to sign in" warning that links the D2L
    home page. The next run after the user signs in catches up.
 
+## Step 1b: new class shells → automatic first-time import
+
+1. From the D2L home page, `fetch('/d2l/api/lp/1.50/enrollments/myenrollments/?orgUnitTypeId=3')`.
+   Save the JSON to `data/digests/enrollments-<date>.json`.
+2. Run `uv run academic-sync shells-check --file <that file>`. It prints
+   every accessible, real class shell that isn't imported yet. Orientation,
+   cross-listed, non-class and past-term shells are already filtered out.
+3. For each new shell, register it (`course add` with its code, section,
+   term, `--d2l-id <ou>` and `--d2l-url <home url>`), then run the **full first-time
+   import** from `/academic-import` in **unattended mode**:
+   - Do the full scrape, required finds included.
+   - Build every week's banner in the current format (READING → SLIDES &
+     RESOURCES → TOPIC DETAIL, no PACING).
+   - Give every exam and practical its study guides and its submission
+     links.
+   - **Skip the approval gate:** sync every CLEAR item straight to
+     Calendar. Ambiguous or conflicting items go into that class's email
+     under "Needs you".
+   - Save its portal links.
+   - Do this even if the shell is still mostly empty. Each later morning's
+     run fills in newly posted weeks, tests and study guides.
+4. Then continue with every other class as usual. The new class gets its
+   own email that morning, summarizing what was added (as
+   `calendar_changes`), and is baselined like any first run.
+
 ## Step 2: crawl each course (bounded: aim for no more than about 10 page loads per course)
 
 Use D2L's REST API through in-page `fetch` from the logged-in tab
@@ -130,6 +155,18 @@ versions first with `fetch('/d2l/api/versions/')` and use the newest
     submission now?
   - Set `missing_count` from D2L's or the platform's own missing count
     when it shows one.
+- **Study materials for every upcoming test (every run).** For each
+  exam, quiz and practical in the next ~3 weeks, check for newly posted
+  study material:
+  - study guides, review slides, practice exams, review assignments;
+  - course-specific equivalents (CHE's funsheets and keys, BIO's chapter
+    objectives sheets, MAT's section worksheets and the ALEKS chapter
+    review);
+  - announcements that mention a study guide.
+  New finds get added with `render <test_id> --links '[...]' --save`
+  (keep the existing links in the list) plus `update_event`, and become a
+  `calendar_changes` line ("Added the Exam 3 study guide to the Oct 25
+  exam").
 - **Calendar upkeep (small, same rules as `/academic-sync`):**
   - If a new announcement states a new or changed date, run it through
     `extract` (source type `d2l_announcements`), then `plan`. Push only
@@ -142,6 +179,30 @@ versions first with `fetch('/d2l/api/versions/')` and use the newest
     where one exists.
   - Anything ambiguous or conflicting, or anything that would take a big
     crawl, becomes a `needs_you` line, not a guess (invariants 1, 9, 34).
+
+## Step 2b: D2L messages
+
+1. On the D2L home page (`d2l_base_url`), open the envelope (message
+   alerts) dropdown and read the list.
+2. Open each message newer than the last run and read its sender,
+   subject, date and body. The inbox itself is
+   `/d2l/p/le/email/<home ou>`.
+3. Sort each one:
+   - **Automated "Submission receipt" messages** aren't reported. Use them
+     as proof of submission in `deadline_status`.
+   - **Spam and college advertising** (marketing, event promos, surveys
+     unrelated to a class) get dropped.
+   - **A class message** goes in that class's crawl JSON `messages`:
+     `{id, subject, sender, received_on, excerpt, url}`. The class is the
+     one the sender teaches (match instructor names on each course), or
+     failing that, the class the subject or body clearly refers to. The
+     `excerpt` is a short verbatim quote.
+   - **Everything else that's real** (advising, registrar,
+     financial-aid deadlines, college notices that need action) goes into
+     a separate crawl for course `MESSAGES` (an inactive pseudo-course).
+     Ingest and render it like a class; its email is titled "Daily
+     Overview Messages" and has no grade line. It's sent only on days it
+     has something.
 
 ## Step 3: ingest
 

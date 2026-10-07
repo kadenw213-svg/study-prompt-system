@@ -792,13 +792,10 @@ def test_reading_section_is_first_content_section_and_topic_detail_near_bottom()
         weekly_links=[WeeklyLink(label="Slides - Ch 23", url="https://slides.example/23")],
     )
     topics = _topics(_topic("Chapter 23", objectives=["Explain drift"], vocabulary="allele"))
-    description = build_weekly_reading_description(
-        item, COURSE, chapter_topics=topics, pacing="Ch. 23 by Wednesday",
-    )
+    description = build_weekly_reading_description(item, COURSE, chapter_topics=topics)
     order = [
         description.index("<b>READING</b>"),
         description.index("<b>SLIDES &amp; RESOURCES</b>"),
-        description.index("<b>PACING</b>"),
         description.index("<b>TOPIC DETAIL</b>"),
         description.index("<b>CONTACT</b>"),
         description.index("<b>DATES</b>"),
@@ -935,7 +932,7 @@ def test_weekly_reading_description_dates_section_omitted_without_date_range_end
     assert "DATES" not in description
 
 
-def test_weekly_reading_description_includes_pacing_only_when_given():
+def test_weekly_reading_description_never_has_pacing_section():
     item = _item(
         item_type=ItemType.WEEKLY_READING, title="Chapter 2: Cell Structure",
         date=date(2026, 9, 14), date_range_end=date(2026, 9, 20),
@@ -943,7 +940,7 @@ def test_weekly_reading_description_includes_pacing_only_when_given():
     description = build_weekly_reading_description(
         item, COURSE, pacing="Ch. 2 by Wednesday, quiz covers through Ch. 2 by Friday",
     )
-    assert "<b>PACING</b><br>Ch. 2 by Wednesday, quiz covers through Ch. 2 by Friday" in description
+    assert "PACING" not in description and "by Wednesday" not in description
 
 
 def test_format_details_blocks_text_block_with_label():
