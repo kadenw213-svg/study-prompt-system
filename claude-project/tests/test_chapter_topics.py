@@ -96,3 +96,9 @@ def test_build_chapter_topic_blocks_saved_topic_with_no_vocab_or_objectives_fall
     topic = _topic(chapter_label="Chapter 5")
     blocks = build_chapter_topic_blocks(segments, {"chapter-5": topic})
     assert blocks == [{"text": "Chapter 5 — Cell Division"}]
+
+
+def test_chapter_and_section_qualifier_still_matches_chapter():
+    from academic_sync.chapter_topics import split_chapter_segments
+    assert split_chapter_segments("Chapter 5: Systems (11/1); Chapter 7 and Section 2.2: Conics (11/11)") == [
+        ("Chapter 5", "Systems (11/1)"), ("Chapter 7", "Conics (11/11)")]

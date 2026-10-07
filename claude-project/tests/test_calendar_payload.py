@@ -1327,3 +1327,36 @@ def test_non_test_deadline_never_renders_study_guides():
     description = build_deadline_description(item, COURSE, nesting=None, details=None,
                                              required_resources=None)
     assert "STUDY GUIDES" not in description
+
+
+def test_banner_with_huge_resource_list_still_fits_calendar_limit():
+    item = _item(
+        item_type=ItemType.WEEKLY_READING, title="Chapter 1: A; Chapter 2: B",
+        date=date(2026, 8, 24), date_range_end=date(2026, 8, 30),
+        weekly_links=[
+            WeeklyLink(label=f"Worksheet {i} with a long descriptive label",
+                       url=f"https://example.edu/very/long/path/file-{i}.pdf", kind="handout")
+            for i in range(120)
+        ],
+    )
+    topics = _topics(_topic("Chapter 1", objectives=[f"Objective {i} text" for i in range(50)]))
+    description = build_weekly_reading_description(item, COURSE, chapter_topics=topics)
+    assert len(description) <= DESCRIPTION_CHAR_BUDGET
+    assert "more link(s) not shown here for length" in description
+    assert description.endswith("<b>DATES</b><br>Aug 24 - 30")
+
+
+def test_assemble_keeps_minimum_detail_when_resources_are_long():
+    from academic_sync.sync.calendar_payload import (
+        _MIN_FLEXIBLE_CHARS,
+        _assemble_within_budget,
+    )
+
+    resources = "<b>SLIDES</b><br>" + "<br>".join(f'<a href="https://x/{i}">link {i}</a>' for i in range(400))
+    detail = "<b>TOPIC DETAIL</b><br>" + "<br>".join(f"• objective {i}" for i in range(400))
+    out = _assemble_within_budget(["header", resources, detail, "<b>DATES</b>"], 2, 1)
+    assert len(out) <= DESCRIPTION_CHAR_BUDGET
+    kept_detail = out.split("<br><br>")[2]
+    assert kept_detail.startswith("<b>TOPIC DETAIL</b>")
+    assert len(kept_detail) >= _MIN_FLEXIBLE_CHARS - 150
+    assert "more link(s) not shown" in out

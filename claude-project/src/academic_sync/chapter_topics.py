@@ -22,8 +22,10 @@ from academic_sync.models.domain import ChapterTopic
 # ever name chapters by number in their source material ("Chapter 1, 2"),
 # never with a title -- see CLAUDE.md invariant 25's weekly-reading-blocks
 # design and invariant 1 (never fabricate a topic name that isn't there).
+# "Chapter 7 and Section 2.2: Conics" also counts as Chapter 7 -- the
+# "and ..." qualifier is dropped from the label (MAT1340's real module title).
 CHAPTER_SEGMENT_PATTERN = re.compile(
-    r"^(Chapter\s+\d+|Unit\s+\d+)(?:\s*:\s*(.+))?$", re.IGNORECASE
+    r"^(Chapter\s+\d+|Unit\s+\d+)(?:\s+and\s+[^:]+)?(?:\s*:\s*(.+))?$", re.IGNORECASE
 )
 
 

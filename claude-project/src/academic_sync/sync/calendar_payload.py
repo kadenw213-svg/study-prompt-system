@@ -318,7 +318,20 @@ def _truncate_html_block(html: str, budget: int) -> str:
     return "<br>".join(kept)
 
 
-def _assemble_within_budget(blocks: list[str], flexible_index: int) -> str:
+_MIN_FLEXIBLE_CHARS = 1000
+"""Space a banner's TOPIC DETAIL keeps (when it has that much) before its
+resource list is allowed to use the rest of the budget."""
+
+_LINES_NOTE = (
+    "more captured line(s) not shown here for length -- full list saved locally "
+    "(chapter-topic-add / academic-sync render)."
+)
+_LINKS_NOTE = "more link(s) not shown here for length -- open the chapter module in D2L for the rest."
+
+
+def _assemble_within_budget(
+    blocks: list[str], flexible_index: int, secondary_index: int | None = None
+) -> str:
     """Joins `blocks` with this module's standard "<br><br>" separator,
     truncating only `blocks[flexible_index]` -- the one caller-supplied,
     potentially-large content block (a DETAILS or THIS WEEK section built
@@ -330,11 +343,34 @@ def _assemble_within_budget(blocks: list[str], flexible_index: int) -> str:
     if len(joined) <= DESCRIPTION_CHAR_BUDGET - _BUDGET_RESERVE:
         return joined
     separator_cost = len("<br><br>") * (len(blocks) - 1)
+    blocks = list(blocks)
     other_cost = sum(len(b) for i, b in enumerate(blocks) if i != flexible_index)
     remaining = DESCRIPTION_CHAR_BUDGET - _BUDGET_RESERVE - separator_cost - other_cost
-    blocks = list(blocks)
+    want = min(len(blocks[flexible_index]), _MIN_FLEXIBLE_CHARS)
+    if secondary_index is not None and remaining < want:
+        # A long resource list must not crowd out the topic detail entirely
+        # (the quiz GPT reads it): trim the resources first so the detail
+        # block keeps at least `_MIN_FLEXIBLE_CHARS`.
+        target = max(len(blocks[secondary_index]) - (want - remaining), 0)
+        blocks[secondary_index] = _truncate_html_block(blocks[secondary_index], target).replace(
+            _LINES_NOTE, _LINKS_NOTE
+        )
+        other_cost = sum(len(b) for i, b in enumerate(blocks) if i != flexible_index)
+        remaining = DESCRIPTION_CHAR_BUDGET - _BUDGET_RESERVE - separator_cost - other_cost
     blocks[flexible_index] = _truncate_html_block(blocks[flexible_index], max(remaining, 0))
-    return "<br><br>".join(blocks)
+    joined = "<br><br>".join(blocks)
+    hard_limit = DESCRIPTION_CHAR_BUDGET - 120  # room left for the fingerprint tag
+    if secondary_index is not None and len(joined) > hard_limit:
+        # Still over the real limit even with the main block cut: trim the
+        # secondary block (a banner's resource list) at the line level, with
+        # a visible note.
+        over = len(joined) - hard_limit
+        target = max(len(blocks[secondary_index]) - over - 120, 0)
+        blocks[secondary_index] = _truncate_html_block(blocks[secondary_index], target).replace(
+            _LINES_NOTE, _LINKS_NOTE
+        )
+        joined = "<br><br>".join(blocks)
+    return joined
 
 
 def _section(label: str, value: str) -> str:
@@ -785,7 +821,9 @@ def build_weekly_reading_description(
     reading = _reading_section(build_reading_entries(segments, topics), textbook_links)
     if reading:
         blocks.append(_section("READING", reading))
+    resources_index: int | None = None
     if resource_lines:
+        resources_index = len(blocks)
         blocks.append(_section("SLIDES &amp; RESOURCES", "<br>".join(resource_lines)))
     # No PACING section (user-directed 2026-10-07): the banner lists the
     # whole week's work; `pacing` is accepted for call-site compatibility
@@ -803,8 +841,10 @@ def build_weekly_reading_description(
     if item.date is not None and item.date_range_end is not None:
         blocks.append(_section("DATES", _format_date_range(item.date, item.date_range_end)))
     if flexible_index is None:
+        if resources_index is not None:
+            return _assemble_within_budget(blocks, resources_index)
         return "<br><br>".join(blocks)
-    return _assemble_within_budget(blocks, flexible_index)
+    return _assemble_within_budget(blocks, flexible_index, resources_index)
 
 
 def build_event_payload(
