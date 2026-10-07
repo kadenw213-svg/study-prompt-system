@@ -609,6 +609,10 @@ excluding anything they flagged):
      `reference_url`); finding one is not a reason to stop looking for the
      other, and `completeness` gates on `reference_url` specifically
      (CLAUDE.md invariant 17). Full policy: `docs/d2l_discovery.md#links-academicitemreferenceurlreferenceurllabel-academicitemresourceurlresourceurllabel`.
+   - **Every test gets its study guides:** study guide, practice exam,
+     review assignment, exam-resource page. Save them with `render
+     <test_id> --links '[...]' --save`; they render under STUDY GUIDES (see
+     `docs/d2l_discovery.md#links`).
    - **Exams and quizzes: open each one's own instructions page.** If it
      says the work is submitted separately (a "Show Work" or scratch-work
      dropbox), that dropbox is a required find. Set it as the exam's

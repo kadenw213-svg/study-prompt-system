@@ -76,6 +76,19 @@ class ItemType(StrEnum):
         }
 
     @property
+    def is_assessment(self) -> bool:
+        """Tests: the item types whose events carry study-guide links
+        (`weekly_links`) alongside their own turn-in links -- user-directed
+        2026-10-07, see CLAUDE.md invariant 17's amendment."""
+        return self in {
+            ItemType.EXAM,
+            ItemType.FINAL_EXAM,
+            ItemType.QUIZ,
+            ItemType.LAB_PRACTICAL,
+            ItemType.PRE_LAB_QUIZ,
+        }
+
+    @property
     def is_routine_meeting(self) -> bool:
         """Meeting types where showing up "sometime that day" without a
         precise time is still useful, low-stakes visibility -- unlike an

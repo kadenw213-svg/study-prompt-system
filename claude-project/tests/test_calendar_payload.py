@@ -1291,3 +1291,42 @@ def test_deadline_submission_url_renders_as_separate_submit_work_link():
         '<a href="https://d2l.example/dropbox/77">Submit Work</a><br>'
         '<a href="https://tb.example/ch5">Textbook (Ch. 5)</a>'
     )
+
+
+def test_test_items_render_study_guides_after_links():
+    item = _item(
+        item_type=ItemType.EXAM, title="Exam 2", date=date(2026, 10, 20), due_time=time(23, 59),
+        reference_url="https://d2l.example/quiz/2", reference_url_label="Take the exam",
+        weekly_links=[
+            WeeklyLink(label="Exam 2 Study Guide", url="https://d2l.example/sg2.pdf"),
+            WeeklyLink(label="Practice Exam 2", url="https://d2l.example/practice2"),
+            WeeklyLink(label="Syllabus", url="https://d2l.example/syllabus"),
+        ],
+    )
+    description = build_deadline_description(item, COURSE, nesting=None, details=None,
+                                             required_resources=None)
+    assert description.index("<b>LINKS</b>") < description.index("<b>STUDY GUIDES</b>")
+    study = description.split("<b>STUDY GUIDES</b><br>")[1]
+    assert study == (
+        '<a href="https://d2l.example/sg2.pdf">Exam 2 Study Guide</a><br>'
+        '<a href="https://d2l.example/practice2">Practice Exam 2</a>'
+    )
+
+
+def test_timed_exam_meeting_keeps_take_link_and_study_guides_separate():
+    item = _item(
+        item_type=ItemType.EXAM, title="Midterm", date=date(2026, 10, 20), start_time=time(9, 0),
+        reference_url="https://d2l.example/exam-info", reference_url_label="Exam details",
+        weekly_links=[WeeklyLink(label="Midterm Review", url="https://d2l.example/review")],
+    )
+    description = build_meeting_description(item, COURSE, location=None)
+    assert '<b>LINKS</b><br><a href="https://d2l.example/exam-info">Exam details</a>' in description
+    assert '<b>STUDY GUIDES</b><br><a href="https://d2l.example/review">Midterm Review</a>' in description
+
+
+def test_non_test_deadline_never_renders_study_guides():
+    item = _item(item_type=ItemType.ASSIGNMENT, title="HW 1", date=date(2026, 10, 20),
+                 due_time=time(23, 59), weekly_links=[WeeklyLink(label="X", url="https://x")])
+    description = build_deadline_description(item, COURSE, nesting=None, details=None,
+                                             required_resources=None)
+    assert "STUDY GUIDES" not in description

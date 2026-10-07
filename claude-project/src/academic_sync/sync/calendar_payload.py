@@ -579,9 +579,27 @@ def build_deadline_description(
     ref_lines = _reference_lines(item)
     if ref_lines:
         blocks.append(_section("LINKS", "<br>".join(ref_lines)))
+    study_lines = _study_guide_lines(item)
+    if study_lines:
+        blocks.append(_section("STUDY GUIDES", "<br>".join(study_lines)))
     if flexible_index is None:
         return "<br><br>".join(blocks)
     return _assemble_within_budget(blocks, flexible_index)
+
+
+def _study_guide_lines(item: AcademicItem) -> list[str]:
+    """A test's study material -- study guides, practice exams, review
+    assignments, exam-resource pages -- stored in `weekly_links` on the
+    test item and rendered under STUDY GUIDES, after the test's own LINKS
+    (take it / submit work). User-directed 2026-10-07. Only real links
+    discovery opened; syllabus links dropped like everywhere else."""
+    if not item.item_type.is_assessment:
+        return []
+    return [
+        f'<a href="{link.url}">{link.label}</a>'
+        for link in item.weekly_links
+        if not _looks_like_syllabus(f"{link.label} {link.url}")
+    ]
 
 
 def build_meeting_description(
@@ -633,10 +651,18 @@ def build_meeting_description(
     # session's own slide deck / handout / activity / recording +
     # textbook), falling back to reference_url/resource_url -- and a stray
     # syllabus link is dropped either way. See _supplemental_link_lines
-    # and CLAUDE.md invariant 25 (amended 2026-09-01).
-    ref_lines = _supplemental_link_lines(item)
+    # and CLAUDE.md invariant 25 (amended 2026-09-01). A timed in-person
+    # test renders here too: its weekly_links are study guides, so they go
+    # under STUDY GUIDES and its own reference/submission links under LINKS.
+    if item.item_type.is_assessment:
+        ref_lines = _reference_lines(item)
+    else:
+        ref_lines = _supplemental_link_lines(item)
     if ref_lines:
         blocks.append(_section("LINKS", "<br>".join(ref_lines)))
+    study_lines = _study_guide_lines(item)
+    if study_lines:
+        blocks.append(_section("STUDY GUIDES", "<br>".join(study_lines)))
     if flexible_index is None:
         return "<br><br>".join(blocks)
     return _assemble_within_budget(blocks, flexible_index)

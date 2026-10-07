@@ -378,16 +378,18 @@ def test_weekly_reading_add_and_render_links_list(tmp_path):
     assert "syllabus" not in description.lower()
 
 
-def test_render_links_ignored_for_non_weekly_item(tmp_path):
+def test_render_links_on_a_quiz_become_study_guides(tmp_path):
     _isolated_db(tmp_path)
-    item_id = _make_course_with_item(tmp_path)
+    item_id = _make_course_with_item(tmp_path)  # an extracted online quiz
 
     result = runner.invoke(
         app,
-        ["render", item_id, "--links", '[{"label": "X", "url": "https://x.example"}]'],
+        ["render", item_id, "--json", "--links", '[{"label": "Quiz 1 Study Guide", "url": "https://x.example"}]'],
     )
     assert result.exit_code == 0, result.stdout
-    assert "Ignoring --links" in result.stdout
+    assert "Ignoring --links" not in result.stdout
+    description = json.loads(result.stdout)["description"]
+    assert '<b>STUDY GUIDES</b><br><a href="https://x.example">Quiz 1 Study Guide</a>' in description
 
 
 def test_render_weekly_reading_falls_back_to_bare_topic_line_with_no_saved_topics(tmp_path):
@@ -457,3 +459,17 @@ def test_render_submission_url_saved_and_rendered(tmp_path):
     with session_scope() as session:
         item = repository.get_academic_item(session, item_id)
     assert item is not None and item.submission_url == "https://d2l.example/dropbox/9"
+
+
+def test_reading_link_only_pass_keeps_objectives_and_title(tmp_path):
+    _isolated_db(tmp_path)
+    course_id = _make_course(tmp_path)
+    runner.invoke(app, ["chapter-topic-add", "--course", course_id, "--chapter", "Chapter 5",
+                        "--title", "Gases", "--objective", "A", "--objective", "B", "--exhaustive"])
+    runner.invoke(app, ["chapter-topic-add", "--course", course_id, "--chapter", "Chapter 5",
+                        "--section", "5.1 The Gaseous State", "--reading-url", "https://tb.example/5"])
+    with session_scope() as session:
+        topic = repository.get_chapter_topic(session, course_id, "Chapter 5")
+    assert topic is not None
+    assert topic.title == "Gases" and topic.objectives == ["A", "B"] and topic.is_exhaustive
+    assert topic.sections == ["5.1 The Gaseous State"] and topic.reading_url == "https://tb.example/5"

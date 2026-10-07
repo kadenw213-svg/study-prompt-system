@@ -622,10 +622,17 @@ def upsert_chapter_topic(session: Session, topic: domain.ChapterTopic) -> Chapte
         session.add(row)
 
     row.chapter_label = topic.chapter_label
-    row.title = topic.title
-    row.vocabulary = topic.vocabulary
-    row.objectives_json = topic.objectives
-    row.is_exhaustive = topic.is_exhaustive
+    # Every field follows the enrichment-preservation rule: a later pass
+    # that only adds section headings or a reading link must not blank the
+    # title/vocabulary/objectives an earlier pass saved (real incident
+    # 2026-10-07: a sections-only call wiped four chapters' objectives).
+    if topic.title or not row.title:
+        row.title = topic.title
+    if topic.vocabulary or not row.vocabulary:
+        row.vocabulary = topic.vocabulary
+    if topic.objectives or not row.objectives_json:
+        row.objectives_json = topic.objectives
+    row.is_exhaustive = topic.is_exhaustive or (not topic.objectives and bool(row.is_exhaustive))
     # Section headings / reading link are often captured in a separate pass
     # from objectives -- an incoming empty value never blanks a saved one
     # (same enrichment-preservation rule as upsert_academic_item).

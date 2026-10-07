@@ -88,8 +88,9 @@ def build_chapter_topic_blocks(
         # trailing colon after the label, so "Chapter 23: Topic:" would
         # read as an awkward double colon (see docs/d2l_discovery.md's
         # weekly-reading-blocks section).
-        header = f"{label} — {topic_text}" if topic_text else label
         topic = topics_by_label.get(canonicalize_chapter_label(label))
+        text = topic_text or (topic.title if topic and topic.title else "")
+        header = f"{label} — {text}" if text else label
         if topic is None:
             blocks.append({"text": header})
             continue

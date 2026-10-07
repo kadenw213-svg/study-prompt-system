@@ -74,10 +74,15 @@ the same grade warning daily.
 
 1. Open the `d2l_base_url` preference.
 2. If it lands on the D2L homepage, you're logged in. Continue.
-3. If it redirects to any sign-in page, **do not sign in.** That means
-   don't click Sign In, don't trigger a password manager's fill, and
-   don't type anything. The run continues with `login_failed: true` for
-   every course. Each email still goes out, built from local deadlines,
+3. If it redirects to the sign-in page, wait about 10 seconds: LastPass
+   Autologin normally signs in by itself.
+4. Still on the sign-in page? Make **one nudge**: click once into the
+   **username field** (only focusing it), wait about 10 seconds, and check
+   again. This wakes up LastPass when it fills the page but freezes
+   before submitting. **Never** click Sign In, never open LastPass's
+   icon/menu, never type anything (invariant 39).
+5. Still not in? The run continues with `login_failed: true` for every
+   course. Each email still goes out, built from local deadlines,
    with a visible "D2L needs you to sign in" warning that links the D2L
    home page. The next run after the user signs in catches up.
 

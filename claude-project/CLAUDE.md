@@ -282,6 +282,16 @@ to add either; that decision was deliberate, not an oversight.
     Any "submit your work separately" language makes that dropbox a
     required find. See `docs/d2l_discovery.md#links`.
 
+    **Amended 2026-10-07 -- tests carry their study guides.** User-directed:
+    every exam/quiz/practical event lists its real study material under a
+    **STUDY GUIDES** section, after its own LINKS (take it / submit work).
+    That material includes study guides, practice exams, review
+    assignments (e.g. ALEKS "Review: Chapter N"), exam-resource pages, and
+    review videos. They are stored in `weekly_links` on the test item
+    (`ItemType.is_assessment` gates it; `render <id> --links '[...]'
+    --save`). Finding them is a required find for every test, same tier as
+    its submission link. Only links discovery opened, never a syllabus.
+
 18. **A gathered field that isn't wired into the render path doesn't count
     as gathered.** The same 2026-08-18 session found that `render`'s
     `--nesting`/`--details` CLI options were render-time-only -- even after
@@ -1063,10 +1073,19 @@ to add either; that decision was deliberate, not an oversight.
     password) so the 5am run could be fully autonomous. Claude's own
     safety rules don't allow it to submit a login with a password,
     whoever fills it in or authorizes it. So:
-    - Never click Sign In, never trigger a password manager's fill, never
-      type, store, or log a password. That covers the DB, any file, and
-      the public `claude-project/` copy.
-    - `/daily-overview` uses whatever D2L session Chrome already has.
+    - Never click Sign In, never open or use a password manager's fill
+      menu, never type, store, or log a password. That covers the DB, any
+      file, and the public `claude-project/` copy.
+    - `/daily-overview` uses whatever D2L session Chrome already has. The
+      user turned on LastPass **Autologin** for the SSO page, so LastPass
+      itself signs in when the page loads.
+    - **One allowed nudge** (user-directed 2026-10-07). LastPass sometimes
+      fills the page but freezes before auto-submitting. In that case,
+      Claude may click once **into the username field** (just focusing
+      it), wait about 10 seconds, and check again. Focusing the field
+      makes LastPass re-check the page and run its own autologin. Nothing
+      is typed, the Sign In button is never touched, and LastPass's own
+      icon/menu is never used.
     - If D2L redirects to a sign-in page, the run continues with
       `login_failed: true`. Each email then says at the top that D2L needs
       a sign-in, and gives the D2L home link, so the user can sign in once

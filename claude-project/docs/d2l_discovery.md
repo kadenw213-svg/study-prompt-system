@@ -1749,6 +1749,19 @@ deliverable, but nothing on the calendar linked it. Rules:
   date, the companion item stays in the unresolved queue like any other
   undated item (invariant 1).
 
+**Study guides for every test (added 2026-10-07).** Each exam, quiz, or
+practical gets its real study material, rendered under **STUDY GUIDES**
+after the test's own LINKS. This is a required find:
+- Look in the test's own instructions page, the course's exam-resources
+  or review module, the chapter module, announcements about the test, and
+  the external platform. Examples: ALEKS "Review: Chapter N", a "Practice
+  Exam" file, a midterm review guide, review videos.
+- Save them on the test item: `render <test_id> --links '[{"label":
+  "Ch 4 Study Guide", "url": "..."}, {"label": "Practice Exam", "url":
+  "..."}]' --save`.
+- Only links you opened. Never a syllabus. If a test genuinely has none,
+  it has none; don't pad.
+
 **`resource_url` / `resource_url_label` -- external material, almost
 always a textbook:**
 

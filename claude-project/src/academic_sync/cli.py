@@ -1056,14 +1056,18 @@ def render_cmd(
         if submission_url_label is not None:
             item.submission_url_label = submission_url_label
         if links is not None:
-            if item.item_type == ItemType.WEEKLY_READING or item.item_type.is_routine_meeting:
+            if (
+                item.item_type == ItemType.WEEKLY_READING
+                or item.item_type.is_routine_meeting
+                or item.item_type.is_assessment
+            ):
                 item.weekly_links = _parse_weekly_links(links)
             else:
                 console.print(
                     f"[yellow]Ignoring --links for item {item_id}[/yellow]: only "
-                    "WEEKLY_READING banners and lecture/lab meetings use the "
-                    "multi-link list; deadline-type items use "
-                    "--reference-url/--resource-url."
+                    "WEEKLY_READING banners, lecture/lab meetings, and tests (study "
+                    "guides) use the multi-link list; other deadline items use "
+                    "--reference-url/--resource-url/--submission-url."
                 )
         if link_available_date is not None:
             item.link_available_date = date.fromisoformat(link_available_date)
@@ -1544,15 +1548,23 @@ def digest_deadlines_cmd(
 @app.command("digest-ingest")
 def digest_ingest_cmd(
     file: Annotated[Path, typer.Option("--file", help="Path to the crawl JSON (digest.DigestCrawl).")],
+    catch_up_days: Annotated[
+        int,
+        typer.Option("--catch-up-days", help="First run for a course only: how many days back "
+                     "still count as news (default 2; e.g. 7 for a one-time 'past week' catch-up). "
+                     "Anything older is stored as already reported."),
+    ] = 2,
 ) -> None:
     """Record one course's morning crawl: new/changed announcements and
     grades (deduped -- something already emailed is never re-sent unless
     its content changed), needs-attention triggers, the day's overall grade
     snapshot, and the per-day facts `digest-render` needs.
 
-    First run for a course: anything dated more than 2 days before the
-    crawl (or undated) is stored as already reported, so the first email
-    isn't flooded with the whole term's history."""
+    First run for a course: anything dated more than --catch-up-days (default
+    2) before the crawl (or undated) is stored as already reported, so the
+    first email isn't flooded with the whole term's history. After that, each
+    email carries only what's new since the last one -- in daily use, the
+    previous day."""
     try:
         crawl = digest_mod.DigestCrawl.model_validate_json(file.read_text(encoding="utf-8"))
     except (OSError, ValidationError) as exc:
@@ -1566,7 +1578,7 @@ def digest_ingest_cmd(
                           "recording the crawl, but nothing new will email today.[/yellow]")
         baseline_before = None
         if repository.count_digest_entries(session, course.id) == 0:
-            baseline_before = crawl.captured_on - timedelta(days=2)
+            baseline_before = crawl.captured_on - timedelta(days=catch_up_days)
         week_ago = repository.get_course_grade_snapshot_on_or_before(
             session, course.id, crawl.captured_on - timedelta(days=7)
         )
