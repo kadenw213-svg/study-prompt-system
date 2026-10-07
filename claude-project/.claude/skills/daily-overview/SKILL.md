@@ -25,8 +25,7 @@ academic-sync ...`.
 
 **Live tools:** Chrome (`claude-in-chrome`) for D2L and external platforms;
 Gmail `send_message` (to the `digest_email_to` preference only); Google
-Calendar for upkeep; Drive search/read plus the browser for the Sheets
-signal write.
+Calendar for upkeep.
 
 ## What the email contains, and what it never contains
 
@@ -225,13 +224,9 @@ versions first with `fetch('/d2l/api/versions/')` and use the newest
    automatic: anything already emailed with unchanged content is never
    re-sent, and a regrade or new feedback resurfaces as "updated". On a
    course's very first run, older history is baselined automatically.
-2. Run `uv run academic-sync digest-ingest --file <path>`. It prints counts
-   and `signal_candidates`.
-3. For each signal candidate (a major assessment newly under 60%, tied to a
-   real chapter), write a weakness signal to the quiz system's Drive
-   workbook, following `/academic-sync`'s **Drive weakness signal**
-   section. If that browser write fails while unattended, add a
-   `needs_you` line instead.
+2. Run `uv run academic-sync digest-ingest --file <path>`. It prints counts.
+   Ignore its `signal_candidates` output: the GPT quiz system was abandoned
+   2026-10-07, so nothing writes weakness signals to Drive anymore.
 
 ## Step 4: render and send
 

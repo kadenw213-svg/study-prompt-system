@@ -28,9 +28,7 @@ $allowed = @(
     "mcp__claude_ai_Google_Calendar__get_event",
     "mcp__claude_ai_Google_Calendar__create_event",
     "mcp__claude_ai_Google_Calendar__update_event",
-    "mcp__claude_ai_Gmail__send_message",
-    "mcp__claude_ai_Google_Drive__search_files",
-    "mcp__claude_ai_Google_Drive__read_file_content"
+    "mcp__claude_ai_Gmail__send_message"
 )
 
 & claude -p "/daily-overview" --chrome --allowedTools @allowed 2>&1 |

@@ -1019,6 +1019,15 @@ to add either; that decision was deliberate, not an oversight.
     assessment newly under 60% with a real chapter label), and the
     browser write is the same as before.
 
+    **Amended 2026-10-07 -- the GPT quiz system is abandoned; no more Drive
+    signals.** User-directed. Nothing writes to the Drive workbook anymore:
+    `/daily-overview` and `/academic-sync` skip the `__signals` write, and
+    the 5am task no longer allows Drive tools. `digest-ingest` still prints
+    `signal_candidates` (harmless; ignore it). Mentions elsewhere of the GPT
+    system reading banners or TOPIC DETAIL are historical -- TOPIC DETAIL
+    stays because it's the user's own topic list for the week. The weekly
+    Sunday reminder event was deleted from Calendar the same day.
+
 38. **The Daily Overview email relays what changed in the course shell --
     sourced, deduped, deep-linked, never double-sent.** User-directed
     2026-10-05: "remove the need for my interaction with the course

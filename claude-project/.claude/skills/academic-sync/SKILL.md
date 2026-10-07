@@ -1,6 +1,6 @@
 ---
 name: academic-sync
-description: Recurring maintenance for a D2L/Brightspace course already fully scanned by /academic-import -- light-crawl re-scan (extending weekly banners), link refresh, and the Drive weakness-signal write. Use when the user asks to check for updates on an already-registered course, build the next weeks' banners, or refresh unlocked links. Daily grades/announcements/feedback are /daily-overview's job.
+description: Recurring maintenance for a D2L/Brightspace course already fully scanned by /academic-import -- light-crawl re-scan (extending weekly banners), and link refresh. Use when the user asks to check for updates on an already-registered course, build the next weeks' banners, or refresh unlocked links. Daily grades/announcements/feedback are /daily-overview's job.
 user-invocable: true
 ---
 
@@ -20,14 +20,7 @@ as `/academic-import`.
 
 **Live tools this skill uses directly**: Chrome browser control
 (`claude-in-chrome`) for D2L/ALEKS navigation, `mcp__claude_ai_Google_
-Calendar__*` for Calendar reads/writes, and -- for Step 4's weakness-signal
-write (triggered from `/daily-overview`) -- Chrome browser control again, this time on sheets.google.com. The
-Google Drive MCP connector (`mcp__claude_ai_Google_Drive__*`) can locate the
-workbook (`search_files`) and read it (`read_file_content`), but has **no
-tool that writes spreadsheet cell content** -- confirmed live, 2026-09-16
-(`update_file` only changes a file's title/parent, and `create_file` only
-creates brand-new files). Step 4 is therefore a real, live Sheets edit via
-the browser, exactly like Step 1-3's D2L work -- not an API call.
+Calendar__*` for Calendar reads/writes.
 
 ## Step 0: orient
 
@@ -91,54 +84,11 @@ attention" lines. Don't create diagnostic events anymore.
 `diagnostic-*` commands stay for history only. See CLAUDE.md invariant 37
 (amended).
 
-## Step 4: Drive weakness signal (called by /daily-overview)
+## Step 4: Drive weakness signal -- retired 2026-10-07
 
-When `/daily-overview`'s `digest-ingest` prints a `signal_candidate` (a
-major assessment newly under 60%), or another real red flag is tied to
-identifiable chapter coverage (a bombed exam/quiz whose `module_label`/nesting names real
-chapters, a real zero on a chapter-scoped item), write a weakness signal
-into the **same** Google Drive workbook the GPT quiz system
-(`study-prompt-system` repo, schema in `engine/memory.md`) already reads
-for that class, so its next 10-question set weights that chapter as a
-weak spot.
-
-- Find the workbook (`search_files` for `fullText contains
-  'studyPromptDriveMemory'`), open it in the browser at its real
-  `docs.google.com/spreadsheets/d/<id>/edit` URL, and open the `index` tab
-  to find the class's row and whether it already has a `signals_tab` value.
-- **If this class has no signals tab yet**: insert a new column at the end
-  of the `index` tab's header row named `signals_tab` (right-click the last
-  column's letter -> Insert 1 column right -- the Name Box can't navigate
-  to a column that doesn't exist yet, it errors "range exceeds sheet
-  size"), set this class's row to `[class_slug]__signals`, then create a
-  new sheet tab (the `+` button) and rename it (double-click the tab name)
-  to that exact slug. Give it the header row `signal_id | chapter_key |
-  chapter_label | reason | severity | source_week | created_at | status`.
-- Append one row per affected chapter, leaving `chapter_key` blank -- the
-  GPT session resolves it itself from `chapter_label` via the same
-  canonicalization it already uses for exam coverage text; academic-sync
-  only ever needs to write the real, human-readable chapter label(s) the
-  item actually covered. `status = active`.
-- **Typing into cells**: click the target cell (or the Name Box, e.g. type
-  `P4` + `Return` to jump straight to it), then type each field's text and
-  press the real `Tab` key (a separate `key` action) to move to the next
-  column -- do **not** embed a `\t` character inside the typed text itself,
-  it gets inserted as a literal space rather than moving to the next cell
-  (confirmed live, 2026-09-16). A `\n`/`Return` at the end of a field does
-  correctly commit-and-move-down. End a row with `Return` after its last
-  column -- Sheets returns to column A of the next row automatically.
-  Screenshot after each row to confirm it landed in the right cells before
-  moving on; if anything looks wrong, `Ctrl+Z` immediately rather than
-  typing over it.
-- This is additive only -- never write into `quiz_tab`/`reviews_tab`
-  directly (their `concept_key` is a session-invented token this skill can
-  never produce) and never edit the prompt's existing tab/column
-  structure.
-- Not every RED needs this -- skip it when the cause isn't tied to
-  identifiable chapter coverage (e.g. multiple small missing items across
-  unrelated topics) rather than forcing a signal onto a guessed chapter.
-- Close the browser tab when done, same tab-hygiene rule as any other live
-  browser work this skill does.
+The GPT quiz system this fed was abandoned (user-directed). Don't write to
+the Drive workbook. `digest-ingest` still prints `signal_candidates`; ignore
+them.
 
 ## Step 5: weekly reminder event -- retired 2026-10-05
 
